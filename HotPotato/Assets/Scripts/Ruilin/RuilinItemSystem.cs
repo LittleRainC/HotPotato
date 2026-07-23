@@ -95,10 +95,16 @@ namespace Ruilin
     public static class RunInventory
     {
         public const int Capacity = 2;
+        const string SaveKey = "Ruilin.RunInventory.Items";
         static readonly List<OwnedItem> ItemsInternal = new List<OwnedItem>(Capacity);
 
         public static IReadOnlyList<OwnedItem> Items => ItemsInternal;
         public static event Action Changed;
+
+        static RunInventory()
+        {
+            Load();
+        }
 
         public static bool Contains(ItemId id)
         {
@@ -116,6 +122,7 @@ namespace Ruilin
                 Id = id,
                 RemainingUses = definition.UsesPerMatch
             });
+            Save();
             Changed?.Invoke();
             return true;
         }
@@ -131,6 +138,7 @@ namespace Ruilin
                 Id = id,
                 RemainingUses = definition.UsesPerMatch
             };
+            Save();
             Changed?.Invoke();
         }
 
@@ -157,7 +165,42 @@ namespace Ruilin
         public static void ClearRun()
         {
             ItemsInternal.Clear();
+            PlayerPrefs.DeleteKey(SaveKey);
+            PlayerPrefs.Save();
             Changed?.Invoke();
+        }
+
+        static void Save()
+        {
+            var ids = new string[ItemsInternal.Count];
+            for (int i = 0; i < ItemsInternal.Count; i++)
+                ids[i] = ((int)ItemsInternal[i].Id).ToString();
+            PlayerPrefs.SetString(SaveKey, string.Join(",", ids));
+            PlayerPrefs.Save();
+        }
+
+        static void Load()
+        {
+            ItemsInternal.Clear();
+            string saved = PlayerPrefs.GetString(SaveKey, string.Empty);
+            if (string.IsNullOrEmpty(saved))
+                return;
+
+            string[] ids = saved.Split(',');
+            for (int i = 0; i < ids.Length && ItemsInternal.Count < Capacity; i++)
+            {
+                if (!int.TryParse(ids[i], out int raw) || !Enum.IsDefined(typeof(ItemId), raw))
+                    continue;
+                ItemId id = (ItemId)raw;
+                if (Contains(id))
+                    continue;
+                ItemDefinition definition = ItemCatalog.Get(id);
+                ItemsInternal.Add(new OwnedItem
+                {
+                    Id = id,
+                    RemainingUses = definition.UsesPerMatch
+                });
+            }
         }
 
         static OwnedItem Find(ItemId id)
