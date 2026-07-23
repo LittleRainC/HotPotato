@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Chardin
 {
@@ -37,10 +38,13 @@ namespace Chardin
         [SerializeField] float decisionSeconds = 10f;
         [SerializeField] float slipChance = 0.2f;
 
-        [Header("Countdown by alive count")]
-        [SerializeField] Vector2Int range2 = new Vector2Int(8, 12);
-        [SerializeField] Vector2Int range3 = new Vector2Int(10, 16);
-        [SerializeField] Vector2Int range4 = new Vector2Int(14, 20);
+        [Header("初始倒计时随机区间（按存活人数，x=最小 y=最大，含两端）")]
+        [FormerlySerializedAs("range2")]
+        [SerializeField] Vector2Int countdownRange2Alive = new Vector2Int(8, 12);
+        [FormerlySerializedAs("range3")]
+        [SerializeField] Vector2Int countdownRange3Alive = new Vector2Int(10, 16);
+        [FormerlySerializedAs("range4")]
+        [SerializeField] Vector2Int countdownRange4PlusAlive = new Vector2Int(14, 20);
 
         int _holderIndex;
         int _hearts;
@@ -545,10 +549,12 @@ namespace Chardin
 
         int RollInitialCountdown(int aliveCount)
         {
-            Vector2Int range = range2;
-            if (aliveCount >= 4) range = range4;
-            else if (aliveCount == 3) range = range3;
-            return UnityEngine.Random.Range(range.x, range.y + 1);
+            Vector2Int range = countdownRange2Alive;
+            if (aliveCount >= 4) range = countdownRange4PlusAlive;
+            else if (aliveCount == 3) range = countdownRange3Alive;
+            int min = Mathf.Min(range.x, range.y);
+            int max = Mathf.Max(range.x, range.y);
+            return UnityEngine.Random.Range(min, max + 1);
         }
 
         string GetFirstEnemyName()
