@@ -80,11 +80,23 @@ namespace Chardin
         void Update()
         {
             if (_busy || _phase == Phase.MatchOver || _phase == Phase.Boot)
-                return;
-
-            if (_phase == Phase.AwaitingPlayerAction && Time.time >= _decisionDeadline)
             {
-                ForceTimeoutPass();
+                if (_phase != Phase.AwaitingPlayerAction)
+                    hud.SetDecisionTimerVisible(false);
+                return;
+            }
+
+            if (_phase == Phase.AwaitingPlayerAction)
+            {
+                float remaining = _decisionDeadline - Time.time;
+                hud.SetDecisionTimer(remaining, decisionSeconds);
+
+                if (remaining <= 0f)
+                    ForceTimeoutPass();
+            }
+            else
+            {
+                hud.SetDecisionTimerVisible(false);
             }
         }
 
@@ -179,12 +191,14 @@ namespace Chardin
                 _phase = Phase.AwaitingPlayerAction;
                 _decisionDeadline = Time.time + decisionSeconds;
                 hud.SetActionsInteractable(true, _defuseCharges > 0);
-                hud.SetBroadcast($"你的回合 · {decisionSeconds:0}s · 倒计时 {bomb.Logic.Countdown}");
+                hud.SetDecisionTimer(decisionSeconds, decisionSeconds);
+                hud.SetBroadcast($"你的回合 · 炸弹 {bomb.Logic.Countdown}");
             }
             else
             {
                 _phase = Phase.AwaitingAiAction;
                 hud.SetActionsInteractable(false, false);
+                hud.SetDecisionTimerVisible(false);
                 hud.SetBroadcast($"等待 {holder.DisplayName} 行动…");
                 RequestAiMove(holder);
             }
@@ -243,6 +257,7 @@ namespace Chardin
             _busy = true;
             _phase = Phase.Resolving;
             hud.SetActionsInteractable(false, false);
+            hud.SetDecisionTimerVisible(false);
 
             if (!_participants[IndexOf(actorId)].IsAlive || actorId != _holderId)
             {
