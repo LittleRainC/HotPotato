@@ -62,6 +62,12 @@ namespace Chardin
             return result;
         }
 
+        public void AddCountdown(int amount)
+        {
+            Logic.AddCountdown(amount);
+            view.Refresh(Logic, ViewerIsHolder);
+        }
+
         /// <summary>对方接手时调用：若 ≤0 返回 true（应由 Battle 触发挨炸）。</summary>
         public bool CheckExplodeOnReceive()
         {

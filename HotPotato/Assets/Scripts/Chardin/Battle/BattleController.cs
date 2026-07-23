@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
+using Ruilin;
 
 namespace Chardin
 {
@@ -47,6 +48,8 @@ namespace Chardin
         [SerializeField] Vector2Int countdownRange4PlusAlive = new Vector2Int(14, 20);
 
         int _holderIndex;
+        int _previousHolderIndex = -1;
+        int _passDirection = 1;
         int _hearts;
         int _defuseCharges;
         float _decisionDeadline;
@@ -57,6 +60,7 @@ namespace Chardin
         public Phase CurrentPhase => _phase;
         public int DefuseCharges => _defuseCharges;
         public IReadOnlyList<TableSeat> ClockwiseOrder => clockwiseOrder;
+        public Bomb CurrentBomb => bomb;
 
         void Awake()
         {
@@ -134,6 +138,8 @@ namespace Chardin
             _busy = false;
             _pendingPlayerAction = null;
             _hearts = startingHearts;
+            _passDirection = 1;
+            _previousHolderIndex = -1;
 
             if (clockwiseOrder == null || clockwiseOrder.Count < 2)
             {
@@ -152,9 +158,9 @@ namespace Chardin
                 }
             }
 
-            var firstEnemy = GetFirstEnemyName();
-            if (!string.IsNullOrEmpty(firstEnemy))
-                hud.SetOpponentName(firstEnemy);
+            var opponentNames = GetOpponentNames();
+            if (!string.IsNullOrEmpty(opponentNames))
+                hud.SetOpponentName(opponentNames);
 
             hud.SetHearts(_hearts);
             StartFightRound(reviveAll: true);
@@ -168,7 +174,7 @@ namespace Chardin
                     clockwiseOrder[i].ResetSeat();
             }
 
-            _defuseCharges = sharedDefusePerMatch;
+            _defuseCharges = sharedDefusePerMatch + RunInventory.DefuseBonus;
             hud.SetDefuseCharges(_defuseCharges);
 
             int alive = CountAlive();
@@ -358,7 +364,7 @@ namespace Chardin
             switch (action)
             {
                 case BombAction.Shove:
-                    result = bomb.Shove(slipChance);
+                    result = bomb.Shove(actor.IsPlayer ? RunInventory.PlayerSlipChance : slipChance);
                     break;
                 case BombAction.Defuse:
                     result = bomb.Defuse();
@@ -390,6 +396,7 @@ namespace Chardin
                 yield break;
             }
 
+            _previousHolderIndex = actorIndex;
             _holderIndex = targetIndex;
             MoveBombToHolder();
             bomb.SetViewerIsHolder(IsPlayerHolder());
@@ -505,11 +512,88 @@ namespace Chardin
                 return -1;
             for (int step = 1; step <= clockwiseOrder.Count; step++)
             {
-                int idx = (fromIndex + step) % clockwiseOrder.Count;
+                int idx = (fromIndex + _passDirection * step) % clockwiseOrder.Count;
+                if (idx < 0) idx += clockwiseOrder.Count;
                 if (clockwiseOrder[idx] != null && clockwiseOrder[idx].IsAlive)
                     return idx;
             }
             return -1;
+        }
+
+        public bool TryUsePeek()
+        {
+            if (_phase != Phase.AwaitingPlayerAction || !IsPlayerHolder())
+                return false;
+            if (!RunInventory.TryConsume(ItemId.Peek))
+                return false;
+            hud.SetBroadcast($"窥视：当前精确倒计时为 {bomb.Logic.Countdown}");
+            return true;
+        }
+
+        public bool TryUseFateDie()
+        {
+            if (_phase != Phase.AwaitingPlayerAction || _busy || !IsPlayerHolder())
+                return false;
+            if (!RunInventory.TryConsume(ItemId.FateDie))
+                return false;
+            StartCoroutine(ResolveFateDie());
+            return true;
+        }
+
+        IEnumerator ResolveFateDie()
+        {
+            _busy = true;
+            _phase = Phase.Resolving;
+            hud.SetActionsInteractable(false, false);
+            int roll = UnityEngine.Random.Range(1, 7);
+            bomb.AddCountdown(-roll);
+            hud.SetBroadcast($"命运骰：掷出 {roll}，剩余 {bomb.Logic.Countdown}");
+            yield return new WaitForSeconds(0.35f);
+
+            if (bomb.CheckExplodeOnReceive())
+            {
+                yield return HandleExplosion(_holderIndex);
+                yield break;
+            }
+
+            int from = _holderIndex;
+            _previousHolderIndex = from;
+            _holderIndex = GetClockwiseNextIndex(from);
+            MoveBombToHolder();
+            bomb.SetViewerIsHolder(IsPlayerHolder());
+            _busy = false;
+            BeginHolderTurn();
+        }
+
+        public bool TryUseReflectGlove()
+        {
+            if (_phase != Phase.AwaitingPlayerAction || _busy || !IsPlayerHolder())
+                return false;
+            if (_previousHolderIndex < 0 || _previousHolderIndex >= clockwiseOrder.Count
+                || !clockwiseOrder[_previousHolderIndex].IsAlive)
+                return false;
+            if (!RunInventory.TryConsume(ItemId.ReflectGlove))
+                return false;
+            StartCoroutine(ResolveReflectGlove());
+            return true;
+        }
+
+        IEnumerator ResolveReflectGlove()
+        {
+            _busy = true;
+            _phase = Phase.Resolving;
+            hud.SetActionsInteractable(false, false);
+            int playerIndex = _holderIndex;
+            int target = _previousHolderIndex;
+            _passDirection *= -1;
+            _previousHolderIndex = playerIndex;
+            _holderIndex = target;
+            MoveBombToHolder();
+            bomb.SetViewerIsHolder(IsPlayerHolder());
+            hud.SetBroadcast("反弹手套：炸弹原路弹回，传递方向反转！");
+            yield return new WaitForSeconds(0.25f);
+            _busy = false;
+            BeginHolderTurn();
         }
 
         int PickRandomAliveIndex()
@@ -557,15 +641,16 @@ namespace Chardin
             return UnityEngine.Random.Range(min, max + 1);
         }
 
-        string GetFirstEnemyName()
+        string GetOpponentNames()
         {
+            var names = new List<string>();
             for (int i = 0; i < clockwiseOrder.Count; i++)
             {
                 var s = clockwiseOrder[i];
                 if (s != null && !s.IsPlayer)
-                    return s.DisplayName;
+                    names.Add(s.DisplayName);
             }
-            return null;
+            return string.Join(" / ", names);
         }
 
         static string ActionLabel(BombAction a)

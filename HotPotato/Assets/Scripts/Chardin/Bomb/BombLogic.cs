@@ -28,6 +28,11 @@ namespace Chardin
             Countdown = InitialCountdown;
         }
 
+        public void AddCountdown(int amount)
+        {
+            Countdown += amount;
+        }
+
         public BombAppearanceTier GetAppearanceTier()
         {
             float r = RemainingRatio;
