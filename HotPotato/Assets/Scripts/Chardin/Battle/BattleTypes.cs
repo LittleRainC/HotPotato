@@ -2,23 +2,6 @@ using System.Collections.Generic;
 
 namespace Chardin
 {
-    public sealed class BattleParticipant
-    {
-        public int Id { get; }
-        public string DisplayName { get; }
-        public bool IsPlayer { get; }
-        public bool IsAlive { get; set; } = true;
-        public UnityEngine.Transform Seat { get; }
-
-        public BattleParticipant(int id, string displayName, bool isPlayer, UnityEngine.Transform seat)
-        {
-            Id = id;
-            DisplayName = displayName;
-            IsPlayer = isPlayer;
-            Seat = seat;
-        }
-    }
-
     public readonly struct BattleParticipantInfo
     {
         public readonly int Id;
@@ -26,12 +9,12 @@ namespace Chardin
         public readonly bool IsPlayer;
         public readonly bool IsAlive;
 
-        public BattleParticipantInfo(BattleParticipant p)
+        public BattleParticipantInfo(int id, string displayName, bool isPlayer, bool isAlive)
         {
-            Id = p.Id;
-            DisplayName = p.DisplayName;
-            IsPlayer = p.IsPlayer;
-            IsAlive = p.IsAlive;
+            Id = id;
+            DisplayName = displayName;
+            IsPlayer = isPlayer;
+            IsAlive = isAlive;
         }
     }
 
@@ -51,6 +34,7 @@ namespace Chardin
     public struct AiMove
     {
         public BombAction Action;
+        /// <summary>目标在 clockwiseOrder 中的下标。</summary>
         public int TargetId;
     }
 }

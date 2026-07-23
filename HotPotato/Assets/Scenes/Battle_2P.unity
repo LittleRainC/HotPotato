@@ -426,6 +426,7 @@ Transform:
   - {fileID: 300018}
   - {fileID: 300021}
   - {fileID: 300024}
+  - {fileID: 705564188}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &300014
@@ -440,6 +441,7 @@ GameObject:
   - component: {fileID: 500001}
   - component: {fileID: 500002}
   - component: {fileID: 500003}
+  - component: {fileID: 500004}
   m_Layer: 0
   m_Name: Battle_2P
   m_TagString: Untagged
@@ -447,63 +449,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &500001
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 300014}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111104, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  btnPass: {fileID: 0}
-  btnShove: {fileID: 0}
-  btnDefuse: {fileID: 0}
-  defuseBadgeText: {fileID: 0}
-  broadcastText: {fileID: 0}
-  heartsText: {fileID: 0}
-  opponentNameText: {fileID: 0}
---- !u!114 &500002
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 300014}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111103, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  thinkDelay: {x: 1.5, y: 3}
---- !u!114 &500003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 300014}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111105, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  bomb: {fileID: 400002}
-  playerSeat: {fileID: 0}
-  opponentSeat: {fileID: 300018}
-  hud: {fileID: 500001}
-  placeholderAi: {fileID: 500002}
-  startingHearts: 3
-  sharedDefusePerMatch: 3
-  decisionSeconds: 10
-  slipChance: 0.2
-  opponentName: Worm
-  range2: {x: 8, y: 12}
-  range3: {x: 10, y: 16}
-  range4: {x: 14, y: 20}
 --- !u!4 &300015
 Transform:
   m_ObjectHideFlags: 0
@@ -665,8 +610,11 @@ GameObject:
   m_Component:
   - component: {fileID: 300018}
   - component: {fileID: 300019}
+  - component: {fileID: 1755565150}
+  - component: {fileID: 1755565148}
+  - component: {fileID: 1755565149}
   m_Layer: 0
-  m_Name: Opponent
+  m_Name: Worm
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2458,6 +2406,90 @@ MonoBehaviour:
   bomb: {fileID: 400002}
   enableKeyboard: 0
   resetRange: {x: 8, y: 12}
+--- !u!114 &500001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111104, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  btnPass: {fileID: 0}
+  btnShove: {fileID: 0}
+  btnDefuse: {fileID: 0}
+  defuseBadgeText: {fileID: 0}
+  broadcastText: {fileID: 0}
+  opponentNameText: {fileID: 0}
+  heartsRoot: {fileID: 0}
+  heartFilled: {fileID: 0}
+  heartEmpty: {fileID: 0}
+  maxHearts: 3
+  decisionTimerRoot: {fileID: 0}
+  decisionTimerFill: {fileID: 0}
+  decisionTimerText: {fileID: 0}
+  timerNormal: {r: 0.35, g: 0.75, b: 0.45, a: 1}
+  timerUrgent: {r: 0.9, g: 0.2, b: 0.2, a: 1}
+--- !u!114 &500002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111103, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  thinkDelay: {x: 1.5, y: 3}
+--- !u!114 &500003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111105, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bomb: {fileID: 400002}
+  hud: {fileID: 500001}
+  shoveAim: {fileID: 500004}
+  placeholderAi: {fileID: 500002}
+  clockwiseOrder:
+  - {fileID: 705564187}
+  - {fileID: 1755565148}
+  startingHearts: 3
+  sharedDefusePerMatch: 3
+  decisionSeconds: 10
+  slipChance: 0.2
+  range2: {x: 8, y: 12}
+  range3: {x: 10, y: 16}
+  range4: {x: 14, y: 20}
+--- !u!114 &500004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111109, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  arrowLine: {fileID: 0}
+  arrowColor: {r: 1, g: 0.45, b: 0.15, a: 0.95}
+  arrowWidth: 0.08
+  enemyMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!222 &98257588
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2498,6 +2530,53 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 300062}
   m_CullTransparentMesh: 1
+--- !u!1 &705564186
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 705564188}
+  - component: {fileID: 705564187}
+  m_Layer: 0
+  m_Name: PlayerSeat
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &705564187
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 705564186}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111110, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  displayName: Player
+  isPlayer: 1
+  bombAnchor: {fileID: 0}
+--- !u!4 &705564188
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 705564186}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -1.09, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 300013}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!222 &720165179
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2570,6 +2649,84 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 300040}
   m_CullTransparentMesh: 1
+--- !u!114 &1755565148
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111107, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  displayName: Worm
+  isPlayer: 0
+  bombAnchor: {fileID: 0}
+  spriteRenderer: {fileID: 300019}
+  eliminatedAlpha: 0.35
+--- !u!114 &1755565149
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1111111111111111111111111111108, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  thinkDelayNormal: {x: 1.5, y: 2.2}
+  thinkDelayRelaxed: {x: 2.2, y: 3}
+  panicThreshold: 4
+  nervousThreshold: 7
+--- !u!61 &1755565150
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300020}
+  m_Enabled: 1
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 2.56, y: 3.2}
+    newSize: {x: 1, y: 1}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  serializedVersion: 2
+  m_Size: {x: 1.2, y: 1.6}
+  m_EdgeRadius: 0
 --- !u!222 &1796774900
 CanvasRenderer:
   m_ObjectHideFlags: 0

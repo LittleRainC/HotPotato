@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -5,7 +6,9 @@ using UnityEngine;
 namespace Chardin
 {
     /// <summary>
-    /// 单场对局状态机（2P 白盒）。爆炸后 AI 出局则换新弹；玩家挨炸则扣心重开本场。
+    /// 单场对局状态机。
+    /// 圆桌顺序手动拖入 clockwiseOrder；「传」只顺时针传给下一位存活者。
+    /// 「塞」进入瞄准：悬停显示箭头，左键确认，右键取消。
     /// </summary>
     public sealed class BattleController : MonoBehaviour
     {
@@ -13,6 +16,7 @@ namespace Chardin
         {
             Boot,
             AwaitingPlayerAction,
+            AimingShove,
             AwaitingAiAction,
             Resolving,
             MatchOver
@@ -20,34 +24,35 @@ namespace Chardin
 
         [Header("Refs")]
         [SerializeField] Bomb bomb;
-        [SerializeField] Transform playerSeat;
-        [SerializeField] Transform opponentSeat;
         [SerializeField] BattleHud hud;
+        [SerializeField] ShoveAimController shoveAim;
         [SerializeField] PlaceholderBattleAi placeholderAi;
+
+        [Header("圆桌顺序（顺时针，手动拖入 TableSeat / Enemy）")]
+        [SerializeField] List<TableSeat> clockwiseOrder = new List<TableSeat>();
 
         [Header("Match")]
         [SerializeField] int startingHearts = 3;
         [SerializeField] int sharedDefusePerMatch = 3;
         [SerializeField] float decisionSeconds = 10f;
         [SerializeField] float slipChance = 0.2f;
-        [SerializeField] string opponentName = "Worm";
 
         [Header("Countdown by alive count")]
         [SerializeField] Vector2Int range2 = new Vector2Int(8, 12);
         [SerializeField] Vector2Int range3 = new Vector2Int(10, 16);
         [SerializeField] Vector2Int range4 = new Vector2Int(14, 20);
 
-        readonly List<BattleParticipant> _participants = new List<BattleParticipant>();
-        int _holderId;
+        int _holderIndex;
         int _hearts;
         int _defuseCharges;
         float _decisionDeadline;
         bool _busy;
         Phase _phase = Phase.Boot;
+        BombAction? _pendingPlayerAction;
 
         public Phase CurrentPhase => _phase;
-        public int HolderId => _holderId;
         public int DefuseCharges => _defuseCharges;
+        public IReadOnlyList<TableSeat> ClockwiseOrder => clockwiseOrder;
 
         void Awake()
         {
@@ -55,21 +60,28 @@ namespace Chardin
                 bomb = GetComponentInChildren<Bomb>(true);
             if (hud == null)
                 hud = GetComponent<BattleHud>() ?? gameObject.AddComponent<BattleHud>();
+            if (shoveAim == null)
+                shoveAim = GetComponent<ShoveAimController>() ?? gameObject.AddComponent<ShoveAimController>();
 
-            // 关掉炸弹键盘调试，避免和流程抢输入
             var debug = bomb != null ? bomb.GetComponent<BombDebugDriver>() : null;
             if (debug != null)
                 debug.enabled = false;
 
-            AutoWireSeats();
             hud.BindFromHierarchy(transform);
             hud.ActionClicked += OnPlayerActionClicked;
+            shoveAim.Confirmed += OnShoveConfirmed;
+            shoveAim.Cancelled += OnShoveCancelled;
         }
 
         void OnDestroy()
         {
             if (hud != null)
                 hud.ActionClicked -= OnPlayerActionClicked;
+            if (shoveAim != null)
+            {
+                shoveAim.Confirmed -= OnShoveConfirmed;
+                shoveAim.Cancelled -= OnShoveCancelled;
+            }
         }
 
         void Start()
@@ -79,6 +91,19 @@ namespace Chardin
 
         void Update()
         {
+            if (_phase == Phase.AimingShove)
+            {
+                // 瞄准期间仍走决策超时
+                float remainingAim = _decisionDeadline - Time.time;
+                hud.SetDecisionTimer(remainingAim, decisionSeconds);
+                if (remainingAim <= 0f)
+                {
+                    shoveAim.CancelAim();
+                    ForceTimeoutPass();
+                }
+                return;
+            }
+
             if (_busy || _phase == Phase.MatchOver || _phase == Phase.Boot)
             {
                 if (_phase != Phase.AwaitingPlayerAction)
@@ -90,7 +115,6 @@ namespace Chardin
             {
                 float remaining = _decisionDeadline - Time.time;
                 hud.SetDecisionTimer(remaining, decisionSeconds);
-
                 if (remaining <= 0f)
                     ForceTimeoutPass();
             }
@@ -100,46 +124,34 @@ namespace Chardin
             }
         }
 
-        void AutoWireSeats()
-        {
-            if (playerSeat == null)
-            {
-                var seat = transform.Find("PlayerSeat");
-                if (seat == null)
-                {
-                    var go = new GameObject("PlayerSeat");
-                    go.transform.SetParent(transform, false);
-                    go.transform.localPosition = new Vector3(0f, -1.1f, 0f);
-                    playerSeat = go.transform;
-                }
-                else playerSeat = seat;
-            }
-
-            if (opponentSeat == null)
-            {
-                var opp = transform.Find("Opponent");
-                opponentSeat = opp != null ? opp : transform;
-            }
-
-            if (placeholderAi == null)
-            {
-                placeholderAi = GetComponent<PlaceholderBattleAi>();
-                if (placeholderAi == null)
-                    placeholderAi = gameObject.AddComponent<PlaceholderBattleAi>();
-            }
-        }
-
         public void BeginMatch()
         {
             StopAllCoroutines();
             _busy = false;
+            _pendingPlayerAction = null;
             _hearts = startingHearts;
-            _participants.Clear();
 
-            _participants.Add(new BattleParticipant(0, "Player", true, playerSeat));
-            _participants.Add(new BattleParticipant(1, opponentName, false, opponentSeat));
+            if (clockwiseOrder == null || clockwiseOrder.Count < 2)
+            {
+                Debug.LogError("[Battle] clockwiseOrder 需要至少 2 个 TableSeat（含玩家）");
+                _phase = Phase.MatchOver;
+                return;
+            }
 
-            hud.SetOpponentName(opponentName);
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+            {
+                if (clockwiseOrder[i] == null)
+                {
+                    Debug.LogError($"[Battle] clockwiseOrder[{i}] 为空");
+                    _phase = Phase.MatchOver;
+                    return;
+                }
+            }
+
+            var firstEnemy = GetFirstEnemyName();
+            if (!string.IsNullOrEmpty(firstEnemy))
+                hud.SetOpponentName(firstEnemy);
+
             hud.SetHearts(_hearts);
             StartFightRound(reviveAll: true);
         }
@@ -148,19 +160,8 @@ namespace Chardin
         {
             if (reviveAll)
             {
-                for (int i = 0; i < _participants.Count; i++)
-                    _participants[i].IsAlive = true;
-
-                if (opponentSeat != null)
-                {
-                    var sr = opponentSeat.GetComponent<SpriteRenderer>();
-                    if (sr != null)
-                    {
-                        var c = sr.color;
-                        c.a = 1f;
-                        sr.color = c;
-                    }
-                }
+                for (int i = 0; i < clockwiseOrder.Count; i++)
+                    clockwiseOrder[i].ResetSeat();
             }
 
             _defuseCharges = sharedDefusePerMatch;
@@ -168,13 +169,14 @@ namespace Chardin
 
             int alive = CountAlive();
             int initial = RollInitialCountdown(alive);
-            _holderId = PickRandomAliveId();
+            _holderIndex = PickRandomAliveIndex();
 
             bomb.Arm(initial, viewerIsHolder: IsPlayerHolder());
             MoveBombToHolder();
 
-            hud.SetBroadcast($"新炸弹 {initial} · {_participants[IndexOf(_holderId)].DisplayName} 持有");
-            Debug.Log($"[Battle] Round start countdown={initial} holder={_participants[IndexOf(_holderId)].DisplayName}");
+            var holder = clockwiseOrder[_holderIndex];
+            hud.SetBroadcast($"新炸弹 · {holder.DisplayName} 持有");
+            Debug.Log($"[Battle] Round start countdown={initial} holder={holder.DisplayName}");
 
             BeginHolderTurn();
         }
@@ -182,10 +184,11 @@ namespace Chardin
         void BeginHolderTurn()
         {
             _busy = false;
+            _pendingPlayerAction = null;
             bomb.SetViewerIsHolder(IsPlayerHolder());
             MoveBombToHolder();
 
-            var holder = _participants[IndexOf(_holderId)];
+            var holder = clockwiseOrder[_holderIndex];
             if (holder.IsPlayer)
             {
                 _phase = Phase.AwaitingPlayerAction;
@@ -204,21 +207,37 @@ namespace Chardin
             }
         }
 
-        void RequestAiMove(BattleParticipant holder)
+        void RequestAiMove(TableSeat holder)
         {
-            IBattleAi ai = holder.Seat != null
-                ? holder.Seat.GetComponentInChildren<IBattleAi>()
-                : null;
+            IBattleAi ai = holder.GetAi() ?? placeholderAi;
             if (ai == null)
-                ai = placeholderAi;
+            {
+                Debug.LogError($"[Battle] {holder.DisplayName} 没有 IBattleAi");
+                return;
+            }
 
-            var snapshot = BuildSnapshot(holder.Id);
+            var snapshot = BuildSnapshot(holder);
             ai.Decide(snapshot, move =>
             {
                 if (_phase != Phase.AwaitingAiAction)
                     return;
-                StartCoroutine(ResolveMove(holder.Id, move.Action, move.TargetId, fromTimeout: false));
+
+                int targetIndex = ResolveAiTarget(holder, move);
+                StartCoroutine(ResolveMove(_holderIndex, move.Action, targetIndex, fromTimeout: false));
             });
+        }
+
+        int ResolveAiTarget(TableSeat holder, AiMove move)
+        {
+            // 传：强制顺时针下一位
+            if (move.Action == BombAction.Pass)
+                return GetClockwiseNextIndex(_holderIndex);
+
+            // 塞/拆：若给了合法目标就用，否则顺时针下一位
+            int idx = FindIndexById(move.TargetId);
+            if (idx >= 0 && idx != _holderIndex && clockwiseOrder[idx].IsAlive)
+                return idx;
+            return GetClockwiseNextIndex(_holderIndex);
         }
 
         void OnPlayerActionClicked(BombAction action)
@@ -228,46 +247,92 @@ namespace Chardin
             if (action == BombAction.Defuse && _defuseCharges <= 0)
                 return;
 
-            // 2P：唯一合法目标自动选中
-            int targetId = FindOnlyOtherAlive(_holderId);
-            if (targetId < 0)
+            if (action == BombAction.Pass)
+            {
+                int next = GetClockwiseNextIndex(_holderIndex);
+                if (next < 0) return;
+                StartCoroutine(ResolveMove(_holderIndex, BombAction.Pass, next, fromTimeout: false));
                 return;
+            }
 
-            StartCoroutine(ResolveMove(_holderId, action, targetId, fromTimeout: false));
+            if (action == BombAction.Defuse)
+            {
+                // 拆后也移交：2P 自动顺时针；多人时可再扩展点选
+                int next = GetClockwiseNextIndex(_holderIndex);
+                if (next < 0) return;
+                StartCoroutine(ResolveMove(_holderIndex, BombAction.Defuse, next, fromTimeout: false));
+                return;
+            }
+
+            // 塞：进入瞄准
+            _pendingPlayerAction = BombAction.Shove;
+            _phase = Phase.AimingShove;
+            hud.SetActionsInteractable(false, false);
+            hud.SetBroadcast("塞：指向敌人，左键确认，右键取消");
+            shoveAim.BeginAim(GetAliveEnemiesExceptHolder(), bomb.transform);
+        }
+
+        void OnShoveConfirmed(TableSeat target)
+        {
+            if (_phase != Phase.AimingShove || _pendingPlayerAction != BombAction.Shove)
+                return;
+            int targetIndex = clockwiseOrder.IndexOf(target);
+            if (targetIndex < 0 || !target.IsAlive)
+            {
+                OnShoveCancelled();
+                return;
+            }
+            StartCoroutine(ResolveMove(_holderIndex, BombAction.Shove, targetIndex, fromTimeout: false));
+        }
+
+        void OnShoveCancelled()
+        {
+            if (_phase != Phase.AimingShove)
+                return;
+            _pendingPlayerAction = null;
+            _phase = Phase.AwaitingPlayerAction;
+            hud.SetActionsInteractable(true, _defuseCharges > 0);
+            hud.SetBroadcast($"你的回合 · 炸弹 {bomb.Logic.Countdown}");
         }
 
         void ForceTimeoutPass()
         {
-            if (_phase != Phase.AwaitingPlayerAction || _busy)
+            if ((_phase != Phase.AwaitingPlayerAction && _phase != Phase.AimingShove) || _busy)
                 return;
 
-            int targetId = PickRandomAliveExcept(_holderId);
-            if (targetId < 0)
+            int next = GetClockwiseNextIndex(_holderIndex);
+            if (next < 0)
                 return;
 
             hud.SetBroadcast("超时！强制传");
-            StartCoroutine(ResolveMove(_holderId, BombAction.Pass, targetId, fromTimeout: true));
+            StartCoroutine(ResolveMove(_holderIndex, BombAction.Pass, next, fromTimeout: true));
         }
 
-        IEnumerator ResolveMove(int actorId, BombAction action, int targetId, bool fromTimeout)
+        IEnumerator ResolveMove(int actorIndex, BombAction action, int targetIndex, bool fromTimeout)
         {
-            if (_busy)
+            if (_busy && _phase == Phase.Resolving)
                 yield break;
 
             _busy = true;
             _phase = Phase.Resolving;
+            _pendingPlayerAction = null;
             hud.SetActionsInteractable(false, false);
             hud.SetDecisionTimerVisible(false);
 
-            if (!_participants[IndexOf(actorId)].IsAlive || actorId != _holderId)
+            if (actorIndex < 0 || actorIndex >= clockwiseOrder.Count)
+                yield break;
+            if (!clockwiseOrder[actorIndex].IsAlive || actorIndex != _holderIndex)
             {
                 _busy = false;
                 BeginHolderTurn();
                 yield break;
             }
 
-            if (targetId == actorId || !IsAlive(targetId))
-                targetId = PickRandomAliveExcept(actorId);
+            if (targetIndex < 0 || targetIndex >= clockwiseOrder.Count
+                || targetIndex == actorIndex || !clockwiseOrder[targetIndex].IsAlive)
+            {
+                targetIndex = GetClockwiseNextIndex(actorIndex);
+            }
 
             if (action == BombAction.Defuse)
             {
@@ -280,7 +345,11 @@ namespace Chardin
                 }
             }
 
-            var actor = _participants[IndexOf(actorId)];
+            // 传：强制改成顺时针下一位
+            if (action == BombAction.Pass)
+                targetIndex = GetClockwiseNextIndex(actorIndex);
+
+            var actor = clockwiseOrder[actorIndex];
             BombActionResult result;
             switch (action)
             {
@@ -306,27 +375,24 @@ namespace Chardin
 
             if (result.Slipped)
             {
-                // 手滑弹回 = 一次接手判定
                 if (result.ExplodedOnSelfAfterSlip)
                 {
-                    yield return HandleExplosion(actorId);
+                    yield return HandleExplosion(actorIndex);
                     yield break;
                 }
 
-                // 仍持有，继续自己的回合
                 _busy = false;
                 BeginHolderTurn();
                 yield break;
             }
 
-            // 移交
-            _holderId = targetId;
+            _holderIndex = targetIndex;
             MoveBombToHolder();
             bomb.SetViewerIsHolder(IsPlayerHolder());
 
             if (bomb.CheckExplodeOnReceive())
             {
-                yield return HandleExplosion(targetId);
+                yield return HandleExplosion(targetIndex);
                 yield break;
             }
 
@@ -335,9 +401,9 @@ namespace Chardin
             BeginHolderTurn();
         }
 
-        IEnumerator HandleExplosion(int victimId)
+        IEnumerator HandleExplosion(int victimIndex)
         {
-            var victim = _participants[IndexOf(victimId)];
+            var victim = clockwiseOrder[victimIndex];
             hud.SetBroadcast($"{victim.DisplayName} 挨炸！");
             Debug.Log($"[Battle] EXPLODE {victim.DisplayName}");
             yield return new WaitForSeconds(0.6f);
@@ -351,6 +417,7 @@ namespace Chardin
                     _phase = Phase.MatchOver;
                     hud.SetBroadcast("心已耗尽 · Run 结束");
                     hud.SetActionsInteractable(false, false);
+                    hud.SetDecisionTimerVisible(false);
                     _busy = false;
                     yield break;
                 }
@@ -362,48 +429,41 @@ namespace Chardin
                 yield break;
             }
 
-            // AI 出局
-            victim.IsAlive = false;
-            if (opponentSeat != null)
-            {
-                var sr = opponentSeat.GetComponent<SpriteRenderer>();
-                if (sr != null)
-                {
-                    var c = sr.color;
-                    c.a = 0.35f;
-                    sr.color = c;
-                }
-            }
+            victim.SetAlive(false);
 
-            if (CountAlive() <= 1 && IsAlive(0))
+            if (CountAlive() <= 1 && PlayerStillAlive())
             {
                 _phase = Phase.MatchOver;
                 hud.SetBroadcast("胜利！");
                 hud.SetActionsInteractable(false, false);
+                hud.SetDecisionTimerVisible(false);
                 _busy = false;
                 yield break;
             }
 
-            // 爆炸后重置：新炸弹，残局继续
             hud.SetBroadcast("换新炸弹…");
             yield return new WaitForSeconds(0.5f);
             _busy = false;
             StartFightRound(reviveAll: false);
         }
 
-        BattleSnapshot BuildSnapshot(int selfId)
+        BattleSnapshot BuildSnapshot(TableSeat self)
         {
-            var list = new List<BattleParticipantInfo>(_participants.Count);
-            for (int i = 0; i < _participants.Count; i++)
-                list.Add(new BattleParticipantInfo(_participants[i]));
+            var list = new List<BattleParticipantInfo>(clockwiseOrder.Count);
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+            {
+                var s = clockwiseOrder[i];
+                list.Add(new BattleParticipantInfo(i, s.DisplayName, s.IsPlayer, s.IsAlive));
+            }
 
+            bool holding = clockwiseOrder[_holderIndex] == self;
             return new BattleSnapshot
             {
-                SelfId = selfId,
-                HolderId = _holderId,
+                SelfId = clockwiseOrder.IndexOf(self),
+                HolderId = _holderIndex,
                 SharedDefuseCharges = _defuseCharges,
                 AliveCount = CountAlive(),
-                HolderCountdown = selfId == _holderId ? bomb.Logic.Countdown : (int?)null,
+                HolderCountdown = holding ? bomb.Logic.Countdown : (int?)null,
                 AppearanceRatio = bomb.Logic.RemainingRatio,
                 AppearanceTier = bomb.Logic.GetAppearanceTier(),
                 Participants = list
@@ -412,14 +472,75 @@ namespace Chardin
 
         void MoveBombToHolder()
         {
-            var seat = _participants[IndexOf(_holderId)].Seat;
+            var seat = clockwiseOrder[_holderIndex];
             if (seat == null || bomb == null)
                 return;
 
-            bomb.transform.position = seat.position + Vector3.down * 0.15f;
+            bomb.transform.position = seat.BombAnchor.position;
             var view = bomb.GetComponent<BombView>();
             if (view != null)
                 view.CaptureRestPosition();
+        }
+
+        List<TableSeat> GetAliveEnemiesExceptHolder()
+        {
+            var list = new List<TableSeat>();
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+            {
+                var s = clockwiseOrder[i];
+                if (s == null || !s.IsAlive || s.IsPlayer || i == _holderIndex)
+                    continue;
+                list.Add(s);
+            }
+            return list;
+        }
+
+        int GetClockwiseNextIndex(int fromIndex)
+        {
+            if (clockwiseOrder.Count == 0)
+                return -1;
+            for (int step = 1; step <= clockwiseOrder.Count; step++)
+            {
+                int idx = (fromIndex + step) % clockwiseOrder.Count;
+                if (clockwiseOrder[idx] != null && clockwiseOrder[idx].IsAlive)
+                    return idx;
+            }
+            return -1;
+        }
+
+        int PickRandomAliveIndex()
+        {
+            var ids = new List<int>();
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+                if (clockwiseOrder[i] != null && clockwiseOrder[i].IsAlive)
+                    ids.Add(i);
+            if (ids.Count == 0) return 0;
+            return ids[UnityEngine.Random.Range(0, ids.Count)];
+        }
+
+        int FindIndexById(int id)
+        {
+            if (id < 0 || id >= clockwiseOrder.Count)
+                return -1;
+            return id; // AiMove.TargetId 约定为 clockwise index
+        }
+
+        int CountAlive()
+        {
+            int n = 0;
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+                if (clockwiseOrder[i] != null && clockwiseOrder[i].IsAlive) n++;
+            return n;
+        }
+
+        bool IsPlayerHolder() => clockwiseOrder[_holderIndex] != null && clockwiseOrder[_holderIndex].IsPlayer;
+
+        bool PlayerStillAlive()
+        {
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+                if (clockwiseOrder[i] != null && clockwiseOrder[i].IsPlayer && clockwiseOrder[i].IsAlive)
+                    return true;
+            return false;
         }
 
         int RollInitialCountdown(int aliveCount)
@@ -427,62 +548,18 @@ namespace Chardin
             Vector2Int range = range2;
             if (aliveCount >= 4) range = range4;
             else if (aliveCount == 3) range = range3;
-            return Random.Range(range.x, range.y + 1);
+            return UnityEngine.Random.Range(range.x, range.y + 1);
         }
 
-        int CountAlive()
+        string GetFirstEnemyName()
         {
-            int n = 0;
-            for (int i = 0; i < _participants.Count; i++)
-                if (_participants[i].IsAlive) n++;
-            return n;
-        }
-
-        bool IsAlive(int id)
-        {
-            int i = IndexOf(id);
-            return i >= 0 && _participants[i].IsAlive;
-        }
-
-        bool IsPlayerHolder() => _participants[IndexOf(_holderId)].IsPlayer;
-
-        int IndexOf(int id)
-        {
-            for (int i = 0; i < _participants.Count; i++)
-                if (_participants[i].Id == id) return i;
-            return -1;
-        }
-
-        int PickRandomAliveId()
-        {
-            var ids = new List<int>();
-            for (int i = 0; i < _participants.Count; i++)
-                if (_participants[i].IsAlive) ids.Add(_participants[i].Id);
-            return ids[Random.Range(0, ids.Count)];
-        }
-
-        int PickRandomAliveExcept(int exceptId)
-        {
-            var ids = new List<int>();
-            for (int i = 0; i < _participants.Count; i++)
-                if (_participants[i].IsAlive && _participants[i].Id != exceptId)
-                    ids.Add(_participants[i].Id);
-            if (ids.Count == 0) return -1;
-            return ids[Random.Range(0, ids.Count)];
-        }
-
-        int FindOnlyOtherAlive(int exceptId)
-        {
-            int found = -1;
-            for (int i = 0; i < _participants.Count; i++)
+            for (int i = 0; i < clockwiseOrder.Count; i++)
             {
-                if (!_participants[i].IsAlive || _participants[i].Id == exceptId)
-                    continue;
-                if (found >= 0)
-                    return found; // 多于一个时仍返回第一个；3P+ 再做点选
-                found = _participants[i].Id;
+                var s = clockwiseOrder[i];
+                if (s != null && !s.IsPlayer)
+                    return s.DisplayName;
             }
-            return found;
+            return null;
         }
 
         static string ActionLabel(BombAction a)
