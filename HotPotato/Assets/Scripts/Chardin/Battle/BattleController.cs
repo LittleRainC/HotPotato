@@ -158,12 +158,28 @@ namespace Chardin
                 }
             }
 
-            var opponentNames = GetOpponentNames();
-            if (!string.IsNullOrEmpty(opponentNames))
-                hud.SetOpponentName(opponentNames);
+            SyncOpponentNameLabels();
 
             hud.SetHearts(_hearts);
             StartFightRound(reviveAll: true);
+        }
+
+        void SyncOpponentNameLabels()
+        {
+            var enemies = new List<TableSeat>();
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+            {
+                var s = clockwiseOrder[i];
+                if (s != null && !s.IsPlayer)
+                    enemies.Add(s);
+            }
+
+            // 按世界坐标从左到右，和 UI 上的 OpponentName 标签对齐
+            enemies.Sort((a, b) => a.BombAnchor.position.x.CompareTo(b.BombAnchor.position.x));
+            var names = new List<string>(enemies.Count);
+            for (int i = 0; i < enemies.Count; i++)
+                names.Add(enemies[i].DisplayName);
+            hud.SetOpponentNames(names);
         }
 
         void StartFightRound(bool reviveAll)
@@ -239,11 +255,10 @@ namespace Chardin
 
         int ResolveAiTarget(TableSeat holder, AiMove move)
         {
-            // 传：强制顺时针下一位
-            if (move.Action == BombAction.Pass)
+            // 传 / 拆：强制方向上下一位；塞：可用自选目标
+            if (move.Action == BombAction.Pass || move.Action == BombAction.Defuse)
                 return GetClockwiseNextIndex(_holderIndex);
 
-            // 塞/拆：若给了合法目标就用，否则顺时针下一位
             int idx = FindIndexById(move.TargetId);
             if (idx >= 0 && idx != _holderIndex && clockwiseOrder[idx].IsAlive)
                 return idx;
@@ -267,7 +282,7 @@ namespace Chardin
 
             if (action == BombAction.Defuse)
             {
-                // 拆后也移交：2P 自动顺时针；多人时可再扩展点选
+                // 拆后移交：与传一样，强制方向上下一位
                 int next = GetClockwiseNextIndex(_holderIndex);
                 if (next < 0) return;
                 StartCoroutine(ResolveMove(_holderIndex, BombAction.Defuse, next, fromTimeout: false));
@@ -355,8 +370,8 @@ namespace Chardin
                 }
             }
 
-            // 传：强制改成顺时针下一位
-            if (action == BombAction.Pass)
+            // 传 / 拆：强制改成方向上下一位
+            if (action == BombAction.Pass || action == BombAction.Defuse)
                 targetIndex = GetClockwiseNextIndex(actorIndex);
 
             var actor = clockwiseOrder[actorIndex];
@@ -464,7 +479,8 @@ namespace Chardin
             for (int i = 0; i < clockwiseOrder.Count; i++)
             {
                 var s = clockwiseOrder[i];
-                list.Add(new BattleParticipantInfo(i, s.DisplayName, s.IsPlayer, s.IsAlive));
+                list.Add(new BattleParticipantInfo(
+                    i, s.DisplayName, s.IsPlayer, s.IsAlive, DetectPersonality(s)));
             }
 
             bool holding = clockwiseOrder[_holderIndex] == self;
@@ -477,8 +493,24 @@ namespace Chardin
                 HolderCountdown = holding ? bomb.Logic.Countdown : (int?)null,
                 AppearanceRatio = bomb.Logic.RemainingRatio,
                 AppearanceTier = bomb.Logic.GetAppearanceTier(),
+                PassDirection = _passDirection >= 0 ? 1 : -1,
                 Participants = list
             };
+        }
+
+        static SeatPersonality DetectPersonality(TableSeat seat)
+        {
+            if (seat == null)
+                return SeatPersonality.Unknown;
+            if (seat.IsPlayer)
+                return SeatPersonality.Player;
+            if (seat.GetComponent<WormAi>() != null)
+                return SeatPersonality.Worm;
+            if (seat.GetComponent<AshAi>() != null)
+                return SeatPersonality.Ash;
+            if (seat.GetComponent<SnakeAi>() != null)
+                return SeatPersonality.Snake;
+            return SeatPersonality.Unknown;
         }
 
         void MoveBombToHolder()
@@ -639,18 +671,6 @@ namespace Chardin
             int min = Mathf.Min(range.x, range.y);
             int max = Mathf.Max(range.x, range.y);
             return UnityEngine.Random.Range(min, max + 1);
-        }
-
-        string GetOpponentNames()
-        {
-            var names = new List<string>();
-            for (int i = 0; i < clockwiseOrder.Count; i++)
-            {
-                var s = clockwiseOrder[i];
-                if (s != null && !s.IsPlayer)
-                    names.Add(s.DisplayName);
-            }
-            return string.Join(" / ", names);
         }
 
         static string ActionLabel(BombAction a)

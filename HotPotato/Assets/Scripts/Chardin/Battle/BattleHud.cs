@@ -190,6 +190,64 @@ namespace Chardin
                 opponentNameText.text = name;
         }
 
+        /// <summary>
+        /// 按屏幕从左到右，把每个敌人名字写到对应的 OpponentName 标签上（不再拼成一个字符串）。
+        /// </summary>
+        public void SetOpponentNames(IReadOnlyList<string> names)
+        {
+            var labels = CollectOpponentNameLabels();
+            int count = names != null ? names.Count : 0;
+            for (int i = 0; i < labels.Count; i++)
+            {
+                if (i < count && !string.IsNullOrEmpty(names[i]))
+                {
+                    labels[i].gameObject.SetActive(true);
+                    labels[i].text = names[i];
+                }
+                else
+                {
+                    labels[i].text = string.Empty;
+                    // 多出来的标签藏掉，避免残留旧名字
+                    if (i >= count)
+                        labels[i].gameObject.SetActive(false);
+                }
+            }
+
+            // 兼容旧单字段引用
+            if (count > 0 && opponentNameText != null && labels.Count == 0)
+                opponentNameText.text = names[0];
+        }
+
+        List<Text> CollectOpponentNameLabels()
+        {
+            var result = new List<Text>();
+
+            Transform canvas = null;
+            if (opponentNameText != null)
+            {
+                canvas = opponentNameText.canvas != null
+                    ? opponentNameText.canvas.transform
+                    : opponentNameText.transform.root;
+            }
+
+            if (canvas == null)
+                return result;
+
+            var transforms = canvas.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                var t = transforms[i];
+                if (!t.name.StartsWith("OpponentName"))
+                    continue;
+                var text = t.GetComponentInChildren<Text>(true);
+                if (text != null && !result.Contains(text))
+                    result.Add(text);
+            }
+
+            result.Sort((a, b) => a.rectTransform.position.x.CompareTo(b.rectTransform.position.x));
+            return result;
+        }
+
         public void SetBroadcast(string message)
         {
             if (broadcastText != null)

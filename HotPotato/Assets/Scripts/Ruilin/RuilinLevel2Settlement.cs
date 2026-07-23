@@ -30,7 +30,8 @@ namespace Ruilin
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Bootstrap()
         {
-            if (SceneManager.GetActiveScene().name != "Level2")
+            string scene = SceneManager.GetActiveScene().name;
+            if (scene != "Level2" && scene != "Level3")
                 return;
 
             BattleController controller = Object.FindObjectOfType<BattleController>();
@@ -78,6 +79,13 @@ namespace Ruilin
                 BuildUi();
             else
                 WireUiButtons();
+            EnsurePlayerBombItemBar();
+            HideLegacyItemBar();
+
+            // 直接进 Level2/3（或新开 Play）会带上 PlayerPrefs 旧背包；仅续关/重开时保留。
+            if (!RunInventory.ConsumeRunContinuing())
+                RunInventory.ClearRun();
+
             RunInventory.ResetUsesForMatch();
             RunInventory.Changed += RefreshItemBar;
             RefreshItemBar();
@@ -103,6 +111,8 @@ namespace Ruilin
                 font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             BuildUi();
             WireUiButtons();
+            EnsurePlayerBombItemBar();
+            HideLegacyItemBar();
             UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
 #endif
         }
@@ -154,6 +164,7 @@ namespace Ruilin
         {
             Time.timeScale = 1f;
             RunInventory.ResetUsesForMatch();
+            RunInventory.MarkRunContinuing(); // 本关重开保留背包
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
@@ -215,36 +226,95 @@ namespace Ruilin
 
         void ShowReplacePanel()
         {
+            if (replacePanel == null)
+            {
+                Debug.LogError("[Ruilin] replacePanel 缺失");
+                return;
+            }
+
+            // 提到最前，避免被奖励层挡住点击
+            replacePanel.transform.SetAsLastSibling();
             replacePanel.SetActive(true);
+
             Transform slots = replacePanel.transform.Find("Slots");
+            if (slots == null)
+            {
+                // 兼容旧层级：找带多个 Button 的子节点
+                for (int i = 0; i < replacePanel.transform.childCount; i++)
+                {
+                    var child = replacePanel.transform.GetChild(i);
+                    if (child.GetComponentsInChildren<Button>(true).Length >= 2)
+                    {
+                        slots = child;
+                        break;
+                    }
+                }
+            }
+
+            if (slots == null || slots.childCount < 2 || RunInventory.Items.Count < 2)
+            {
+                Debug.LogError("[Ruilin] 替换槽位未就绪 slots=" + (slots != null) +
+                               " items=" + RunInventory.Items.Count);
+                // 兜底：无法替换则放弃本奖励，仍可 NEXT
+                nextButton.gameObject.SetActive(true);
+                return;
+            }
+
             for (int i = 0; i < 2; i++)
             {
                 Button button = slots.GetChild(i).GetComponent<Button>();
+                if (button == null)
+                    button = slots.GetChild(i).GetComponentInChildren<Button>(true);
+                if (button == null)
+                    continue;
+
+                // 保证可见可点
+                var img = button.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.raycastTarget = true;
+                    if (img.color.a < 0.5f)
+                        img.color = new Color(0.24f, 0.29f, 0.38f, 1f);
+                }
+
                 int captured = i;
                 button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() => ReplaceItem(captured));
-                button.GetComponentInChildren<Text>().text =
-                    "替换 " + ItemCatalog.Get(RunInventory.Items[i].Id).Name;
+                button.interactable = true;
+
+                Text label = button.GetComponentInChildren<Text>(true);
+                if (label != null)
+                    label.text = "替换 " + ItemCatalog.Get(RunInventory.Items[i].Id).Name;
             }
         }
 
         void ReplaceItem(int slot)
         {
+            if (pendingReward == null)
+                return;
+            if (slot < 0 || slot >= RunInventory.Items.Count)
+                return;
+
             RunInventory.ReplaceAt(slot, pendingReward.Id);
-            replacePanel.SetActive(false);
-            nextButton.gameObject.SetActive(true);
+            if (replacePanel != null)
+                replacePanel.SetActive(false);
+            if (nextButton != null)
+                nextButton.gameObject.SetActive(true);
+            RefreshItemBar();
         }
 
         void NextLevel()
         {
-            if (!rewardCommitted || replacePanel.activeSelf)
+            if (!rewardCommitted || (replacePanel != null && replacePanel.activeSelf))
                 return;
 
             Time.timeScale = 1f;
-            // 目前工程只有Level2结算约定；下一关场景可在Build Settings中紧跟Level2。
             int next = SceneManager.GetActiveScene().buildIndex + 1;
             if (next < SceneManager.sceneCountInBuildSettings)
+            {
+                RunInventory.MarkRunContinuing();
                 SceneManager.LoadScene(next);
+            }
             else
             {
                 rewardPanel.SetActive(false);
@@ -286,16 +356,6 @@ namespace Ruilin
             MakeButton(slots.transform, "槽位1", null, Vector2.zero, Vector2.one);
             MakeButton(slots.transform, "槽位2", null, Vector2.zero, Vector2.one);
             replacePanel.SetActive(false);
-
-            itemBar = MakePanel(canvas.transform, "RuilinItemBar",
-                new Vector2(0.015f, 0.03f), new Vector2(0.30f, 0.15f),
-                new Color(0f, 0f, 0f, 0.62f)).transform;
-            var barLayout = itemBar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            barLayout.spacing = 10f;
-            barLayout.padding = new RectOffset(8, 8, 8, 8);
-            barLayout.childForceExpandWidth = true;
-            MakeButton(itemBar, "空", null, Vector2.zero, Vector2.one);
-            MakeButton(itemBar, "空", null, Vector2.zero, Vector2.one);
         }
 
         bool BindExistingUi()
@@ -303,8 +363,7 @@ namespace Ruilin
             Transform gameOver = canvas.transform.Find("RuilinGameOver");
             Transform reward = canvas.transform.Find("RuilinReward");
             Transform replace = canvas.transform.Find("RuilinReplace");
-            Transform bar = canvas.transform.Find("RuilinItemBar");
-            if (gameOver == null || reward == null || replace == null || bar == null)
+            if (gameOver == null || reward == null || replace == null)
                 return false;
 
             Button[] gameOverButtons = gameOver.GetComponentsInChildren<Button>(true);
@@ -316,11 +375,119 @@ namespace Ruilin
             gameOverPanel = gameOver.gameObject;
             rewardPanel = reward.gameObject;
             replacePanel = replace.gameObject;
-            itemBar = bar;
             rewardCards[0] = rewardButtons[0];
             rewardCards[1] = rewardButtons[1];
             nextButton = rewardButtons[2];
             return true;
+        }
+
+        /// <summary>
+        /// 复用 BottomBar/PlayerBombPanel 作为道具栏，不再单独造 RuilinItemBar。
+        /// </summary>
+        void EnsurePlayerBombItemBar()
+        {
+            Transform panel = FindPlayerBombPanel();
+            if (panel == null)
+            {
+                Debug.LogError("[Ruilin] 未找到 PlayerBombPanel，道具栏无法绑定。");
+                itemBar = null;
+                return;
+            }
+
+            // 标题：保留原 Text，若没有就补一个
+            Text title = null;
+            for (int i = 0; i < panel.childCount; i++)
+            {
+                var child = panel.GetChild(i);
+                if (child.name == "Slots")
+                    continue;
+                title = child.GetComponent<Text>();
+                if (title != null)
+                    break;
+            }
+            if (title == null)
+                title = MakeText(panel, "道具栏", 18, new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.98f));
+            else
+            {
+                title.text = "道具栏";
+                var titleRt = title.rectTransform;
+                titleRt.anchorMin = new Vector2(0.05f, 0.72f);
+                titleRt.anchorMax = new Vector2(0.95f, 0.98f);
+                titleRt.offsetMin = Vector2.zero;
+                titleRt.offsetMax = Vector2.zero;
+            }
+
+            Transform slots = panel.Find("Slots");
+            if (slots == null)
+            {
+                GameObject slotsGo = MakePanel(panel, "Slots",
+                    new Vector2(0.04f, 0.06f), new Vector2(0.96f, 0.68f),
+                    Color.clear);
+                slots = slotsGo.transform;
+                var layout = slotsGo.AddComponent<HorizontalLayoutGroup>();
+                layout.spacing = 6f;
+                layout.padding = new RectOffset(2, 2, 2, 2);
+                layout.childForceExpandWidth = true;
+                layout.childForceExpandHeight = true;
+                layout.childControlWidth = true;
+                layout.childControlHeight = true;
+            }
+
+            while (slots.childCount < 2)
+                MakeButton(slots, "空", null, Vector2.zero, Vector2.one);
+
+            // 槽位铺满 Slots
+            for (int i = 0; i < 2; i++)
+            {
+                var slotRt = slots.GetChild(i) as RectTransform;
+                if (slotRt == null)
+                    continue;
+                slotRt.anchorMin = Vector2.zero;
+                slotRt.anchorMax = Vector2.one;
+                slotRt.offsetMin = Vector2.zero;
+                slotRt.offsetMax = Vector2.zero;
+                var label = slotRt.GetComponentInChildren<Text>();
+                if (label != null)
+                    label.fontSize = 16;
+            }
+
+            itemBar = slots;
+        }
+
+        Transform FindPlayerBombPanel()
+        {
+            if (canvas == null)
+                return null;
+            Transform direct = canvas.transform.Find("BottomBar/PlayerBombPanel");
+            if (direct != null)
+                return direct;
+
+            Transform[] all = canvas.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+                if (all[i].name == "PlayerBombPanel")
+                    return all[i];
+            return null;
+        }
+
+        void HideLegacyItemBar()
+        {
+            if (canvas == null)
+                return;
+            Transform legacy = canvas.transform.Find("RuilinItemBar");
+            if (legacy == null)
+            {
+                Transform[] all = canvas.GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i].name == "RuilinItemBar")
+                    {
+                        legacy = all[i];
+                        break;
+                    }
+                }
+            }
+            if (legacy != null)
+                legacy.gameObject.SetActive(false);
         }
 
         void WireUiButtons()
@@ -347,8 +514,14 @@ namespace Ruilin
                 return;
             for (int i = 0; i < 2; i++)
             {
+                if (i >= itemBar.childCount)
+                    break;
                 Button slotButton = itemBar.GetChild(i).GetComponent<Button>();
+                if (slotButton == null)
+                    continue;
                 Text label = slotButton.GetComponentInChildren<Text>();
+                if (label == null)
+                    continue;
                 slotButton.onClick.RemoveAllListeners();
                 slotButton.interactable = false;
                 if (i >= RunInventory.Items.Count)

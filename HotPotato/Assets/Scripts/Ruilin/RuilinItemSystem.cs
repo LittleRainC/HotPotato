@@ -170,6 +170,29 @@ namespace Ruilin
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// 跨关卡续跑标记：NextLevel / 本关重开前写入；新开 Play 未带标记则清空背包。
+        /// </summary>
+        const string ContinueKey = "Ruilin.RunContinue";
+
+        public static void MarkRunContinuing()
+        {
+            PlayerPrefs.SetInt(ContinueKey, 1);
+            PlayerPrefs.Save();
+        }
+
+        /// <returns>true = 从上一关或本关重开续跑，不要清空背包。</returns>
+        public static bool ConsumeRunContinuing()
+        {
+            bool continuing = PlayerPrefs.GetInt(ContinueKey, 0) == 1;
+            if (continuing)
+            {
+                PlayerPrefs.SetInt(ContinueKey, 0);
+                PlayerPrefs.Save();
+            }
+            return continuing;
+        }
+
         static void Save()
         {
             var ids = new string[ItemsInternal.Count];
