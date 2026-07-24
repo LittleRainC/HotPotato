@@ -29,6 +29,7 @@ namespace Chardin
         [SerializeField] BattleHud hud;
         [SerializeField] ShoveAimController shoveAim;
         [SerializeField] PlaceholderBattleAi placeholderAi;
+        [SerializeField] BombTransferFx transferFx;
 
         [Header("圆桌顺序（顺时针，手动拖入 TableSeat / Enemy）")]
         [SerializeField] List<TableSeat> clockwiseOrder = new List<TableSeat>();
@@ -70,6 +71,17 @@ namespace Chardin
                 hud = GetComponent<BattleHud>() ?? gameObject.AddComponent<BattleHud>();
             if (shoveAim == null)
                 shoveAim = GetComponent<ShoveAimController>() ?? gameObject.AddComponent<ShoveAimController>();
+            if (transferFx == null && bomb != null)
+                transferFx = bomb.GetComponent<BombTransferFx>() ?? bomb.gameObject.AddComponent<BombTransferFx>();
+
+            if (clockwiseOrder != null)
+            {
+                for (int i = 0; i < clockwiseOrder.Count; i++)
+                {
+                    if (clockwiseOrder[i] != null)
+                        clockwiseOrder[i].EnsureBombPosition();
+                }
+            }
 
             var debug = bomb != null ? bomb.GetComponent<BombDebugDriver>() : null;
             if (debug != null)
@@ -396,19 +408,47 @@ namespace Chardin
             hud.SetBroadcast(line);
             Debug.Log($"[Battle] {line} -> {result.CountdownAfter} transfer={result.ShouldTransfer}");
 
-            yield return new WaitForSeconds(0.35f);
+            // 刷新炸弹外观（倒计时已变），再播程序动画
+            bomb.SetViewerIsHolder(IsPlayerHolder());
+
+            Vector3 fromPos = actor.BombAnchor.position;
+            if (bomb != null)
+                fromPos = bomb.transform.position;
 
             if (result.Slipped)
             {
+                if (transferFx != null)
+                    yield return transferFx.PlaySlip(bomb.transform, "-2");
+                else
+                    yield return new WaitForSeconds(0.35f);
+
                 if (result.ExplodedOnSelfAfterSlip)
                 {
                     yield return HandleExplosion(actorIndex);
                     yield break;
                 }
 
+                MoveBombToHolder();
                 _busy = false;
                 BeginHolderTurn();
                 yield break;
+            }
+
+            TableSeat target = clockwiseOrder[targetIndex];
+            Vector3 toPos = target != null ? target.BombAnchor.position : fromPos;
+
+            if (transferFx != null)
+            {
+                if (action == BombAction.Shove)
+                    yield return transferFx.PlayShove(bomb.transform, fromPos, toPos, target, "-2");
+                else if (action == BombAction.Defuse)
+                    yield return transferFx.PlayDefuseTransfer(bomb.transform, fromPos, toPos, target);
+                else
+                    yield return transferFx.PlayPass(bomb.transform, fromPos, toPos, target, "-1");
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.35f);
             }
 
             _previousHolderIndex = actorIndex;
@@ -422,7 +462,7 @@ namespace Chardin
                 yield break;
             }
 
-            yield return new WaitForSeconds(0.2f);
+            yield return new WaitForSeconds(0.12f);
             _busy = false;
             BeginHolderTurn();
         }

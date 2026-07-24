@@ -11,11 +11,13 @@ namespace Chardin
         void Reset()
         {
             Configure("Player", player: true);
+            EnsureBombPosition();
         }
 
-        void Awake()
+        protected override void Awake()
         {
             Configure(DisplayName, player: true);
+            base.Awake();
         }
     }
 }

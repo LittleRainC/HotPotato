@@ -4,28 +4,23 @@ namespace Chardin
 {
     /// <summary>
     /// 敌人基本体：可复制后换皮/换 AI。拖进 BattleController.clockwiseOrder。
+    /// 外观在子物体 Sprite 上；死亡时关掉该子物体。
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Collider2D))]
     public class Enemy : TableSeat
     {
-        [SerializeField] SpriteRenderer spriteRenderer;
-        [SerializeField] float eliminatedAlpha = 0.35f;
-        Color _baseColor = Color.white;
-
         void Reset()
         {
             Configure(gameObject.name, player: false);
             EnsureCollider();
-            spriteRenderer = GetComponent<SpriteRenderer>();
+            EnsureBombPosition();
+            CacheVisualRoot();
         }
 
-        void Awake()
+        protected override void Awake()
         {
-            if (spriteRenderer == null)
-                spriteRenderer = GetComponent<SpriteRenderer>();
-            if (spriteRenderer != null)
-                _baseColor = spriteRenderer.color;
+            base.Awake();
             EnsureCollider();
         }
 
@@ -47,22 +42,16 @@ namespace Chardin
         public override void SetAlive(bool alive)
         {
             base.SetAlive(alive);
-            if (spriteRenderer == null)
-                spriteRenderer = GetComponent<SpriteRenderer>();
-            if (spriteRenderer == null)
-                return;
-
-            var c = _baseColor;
-            c.a = alive ? _baseColor.a : eliminatedAlpha;
-            spriteRenderer.color = c;
+            CacheVisualRoot();
+            if (VisualRoot != null)
+                VisualRoot.gameObject.SetActive(alive);
         }
 
         public override void ResetSeat()
         {
-            if (spriteRenderer == null)
-                spriteRenderer = GetComponent<SpriteRenderer>();
-            if (spriteRenderer != null)
-                spriteRenderer.color = _baseColor;
+            CacheVisualRoot();
+            if (VisualRoot != null)
+                VisualRoot.gameObject.SetActive(true);
             base.ResetSeat();
         }
     }
