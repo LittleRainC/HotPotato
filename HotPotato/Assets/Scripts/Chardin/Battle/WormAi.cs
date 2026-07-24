@@ -7,7 +7,8 @@ namespace Chardin
 {
     /// <summary>
     /// Worm（怂包）：数字一小就慌。
-    /// ≤4 优先拆，否则塞；≤7 传；更大则传且思考偏慢。
+    /// C=1：传（下家必死，不必浪费拆）；
+    /// ≤4：有拆就拆，否则塞；更大：传。
     /// </summary>
     public sealed class WormAi : MonoBehaviour, IBattleAi
     {
@@ -27,8 +28,15 @@ namespace Chardin
             Vector2 delay = countdown > nervousThreshold ? thinkDelayRelaxed : thinkDelayNormal;
             yield return new WaitForSeconds(UnityEngine.Random.Range(delay.x, delay.y));
 
+            int next = NextAlive(snapshot);
             BombAction action;
-            if (countdown <= panicThreshold)
+
+            // C=1：传则下家接手即炸。优先传（尤其下家是玩家），不要先拆。
+            if (countdown < 2)
+            {
+                action = BombAction.Pass;
+            }
+            else if (countdown <= panicThreshold)
             {
                 action = snapshot.SharedDefuseCharges > 0 ? BombAction.Defuse : BombAction.Shove;
             }
@@ -37,10 +45,38 @@ namespace Chardin
                 action = BombAction.Pass;
             }
 
-            // 传：交给 Battle 按顺时针解析；这里 TargetId 对 Pass 可忽略
-            // 塞/拆：随机选一个非自己的存活目标（塞的玩家瞄准另走 UI）
-            int targetId = PickRandomTarget(snapshot);
+            int targetId = action == BombAction.Pass || action == BombAction.Defuse
+                ? next
+                : PickRandomTarget(snapshot);
+
             onDecided?.Invoke(new AiMove { Action = action, TargetId = targetId });
+        }
+
+        static int NextAlive(BattleSnapshot snapshot)
+        {
+            int dir = snapshot.PassDirection >= 0 ? 1 : -1;
+            var ring = new List<int>();
+            for (int i = 0; i < snapshot.Participants.Count; i++)
+            {
+                if (snapshot.Participants[i].IsAlive)
+                    ring.Add(snapshot.Participants[i].Id);
+            }
+            if (ring.Count == 0)
+                return snapshot.SelfId;
+
+            int idx = -1;
+            for (int i = 0; i < ring.Count; i++)
+            {
+                if (ring[i] == snapshot.SelfId)
+                {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx < 0) idx = 0;
+            int n = ring.Count;
+            int nextIdx = ((idx + dir) % n + n) % n;
+            return ring[nextIdx];
         }
 
         static int PickRandomTarget(BattleSnapshot snapshot)
