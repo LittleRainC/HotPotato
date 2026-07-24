@@ -7,11 +7,15 @@ using UnityEngine.UI;
 namespace Ruilin
 {
     /// <summary>
-    /// Level2自动结算UI。无需修改场景文件；进入Level2时自动挂到BattleController。
+    /// 关卡结算UI。无需改场景；进入 RunLevelOrder 中的关卡时自动挂到 BattleController。
+    /// NEXT：Level2 → Level3 → Level4 → Level5（同链，末关再开一局）。
     /// </summary>
     [ExecuteAlways]
     public sealed class RuilinLevel2Settlement : MonoBehaviour
     {
+        /// <summary>与 Build Settings 中启用的关卡顺序一致：赢关后按此链加载下一关。</summary>
+        static readonly string[] RunLevelOrder = { "Level2", "Level3", "Level4", "Level5" };
+
         BattleController battle;
         Canvas canvas;
         GameObject gameOverPanel;
@@ -31,7 +35,7 @@ namespace Ruilin
         static void Bootstrap()
         {
             string scene = SceneManager.GetActiveScene().name;
-            if (scene != "Level2" && scene != "Level3")
+            if (System.Array.IndexOf(RunLevelOrder, scene) < 0)
                 return;
 
             BattleController controller = Object.FindObjectOfType<BattleController>();
@@ -82,7 +86,7 @@ namespace Ruilin
             EnsurePlayerBombItemBar();
             HideLegacyItemBar();
 
-            // 直接进 Level2/3（或新开 Play）会带上 PlayerPrefs 旧背包；仅续关/重开时保留。
+            // 直接进 Level2–5（或新开 Play）会带上 PlayerPrefs 旧背包；仅续关/重开时保留。
             if (!RunInventory.ConsumeRunContinuing())
                 RunInventory.ClearRun();
 
@@ -309,11 +313,13 @@ namespace Ruilin
                 return;
 
             Time.timeScale = 1f;
-            int next = SceneManager.GetActiveScene().buildIndex + 1;
-            if (next < SceneManager.sceneCountInBuildSettings)
+            string current = SceneManager.GetActiveScene().name;
+            int idx = System.Array.IndexOf(RunLevelOrder, current);
+            // 与 Level2→Level3 相同：链上下一关；末关（Level4）则本关重开。
+            if (idx >= 0 && idx + 1 < RunLevelOrder.Length)
             {
                 RunInventory.MarkRunContinuing();
-                SceneManager.LoadScene(next);
+                SceneManager.LoadScene(RunLevelOrder[idx + 1]);
             }
             else
             {
