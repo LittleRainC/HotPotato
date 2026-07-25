@@ -4,8 +4,8 @@ using UnityEngine.UI;
 namespace Chardin
 {
     /// <summary>
-    /// UI Image 默认忽略 Sprite.pivot（整张图按 Rect 居中）。
-    /// 把贴图放到子物体 Art，并平移，使 Sprite.pivot 对准本物体 RectTransform.pivot。
+    /// UI Image 默认忽略 Sprite.pivot。
+    /// 把贴图放到子物体 Art：尺寸贴合可见 sprite，pivot 对齐父节点，并由 Art 接收点击。
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
@@ -54,10 +54,26 @@ namespace Chardin
                 sprite.pivot.x / sprite.rect.width,
                 sprite.pivot.y / sprite.rect.height);
 
-            // 贴图中心默认在 rect 中心；平移后让 spritePivot 落到 parent.pivot
-            Vector2 textureCenterToSpritePivot = Vector2.Scale(spritePivot - new Vector2(0.5f, 0.5f), fitted);
-            Vector2 rectCenterToParentPivot = Vector2.Scale(parent.pivot - new Vector2(0.5f, 0.5f), rectSize);
-            art.anchoredPosition = rectCenterToParentPivot - textureCenterToSpritePivot;
+            // Art 用贴合尺寸，不再拉满父节点；点击区 = 可见图
+            art.anchorMin = new Vector2(0.5f, 0.5f);
+            art.anchorMax = new Vector2(0.5f, 0.5f);
+            art.pivot = new Vector2(0.5f, 0.5f);
+            art.sizeDelta = fitted;
+            // 父 pivot 在中心时：把 sprite pivot 对准父中心
+            Vector2 fromCenterToSpritePivot = Vector2.Scale(spritePivot - new Vector2(0.5f, 0.5f), fitted);
+            Vector2 parentPivotOffset = Vector2.Scale(parent.pivot - new Vector2(0.5f, 0.5f), rectSize);
+            art.anchoredPosition = parentPivotOffset - fromCenterToSpritePivot;
+
+            artImage.raycastTarget = true;
+            if (rootHitArea != null)
+            {
+                rootHitArea.raycastTarget = false;
+                rootHitArea.color = new Color(1f, 1f, 1f, 0f);
+            }
+
+            var button = GetComponent<Button>();
+            if (button != null)
+                button.targetGraphic = artImage;
         }
 
         void EnsureArt()
@@ -79,11 +95,6 @@ namespace Chardin
                 art = go.GetComponent<RectTransform>();
                 art.SetParent(transform, false);
                 art.SetAsFirstSibling();
-                art.anchorMin = Vector2.zero;
-                art.anchorMax = Vector2.one;
-                art.offsetMin = Vector2.zero;
-                art.offsetMax = Vector2.zero;
-                art.pivot = new Vector2(0.5f, 0.5f);
                 art.localScale = Vector3.one;
 
                 artImage = go.GetComponent<Image>();
@@ -91,15 +102,8 @@ namespace Chardin
                 artImage.preserveAspect = rootHitArea.preserveAspect;
                 artImage.type = rootHitArea.type;
                 artImage.color = Color.white;
-                artImage.raycastTarget = false;
 
-                // 根 Image：透明点击区
                 rootHitArea.color = new Color(1f, 1f, 1f, 0f);
-                rootHitArea.raycastTarget = true;
-
-                var button = GetComponent<Button>();
-                if (button != null)
-                    button.targetGraphic = artImage;
 
                 var badge = transform.Find("Badge");
                 if (badge != null)
