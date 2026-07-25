@@ -41,7 +41,7 @@ namespace Ruilin
                 Id = ItemId.Peek,
                 Name = "窥视",
                 Type = "主动",
-                Description = "每场2次：查看当前炸弹倒计时的精确数字。",
+                Description = "敌人持弹时可用：查看当前炸弹倒计时的精确数字。每场2次。",
                 UsesPerMatch = 2
             },
             new ItemDefinition
@@ -65,7 +65,7 @@ namespace Ruilin
                 Id = ItemId.ReflectGlove,
                 Name = "反弹手套",
                 Type = "主动",
-                Description = "每场1次：接手瞬间把炸弹原路弹回，倒计时不变，并反转默认传递方向。",
+                Description = "任意时刻可点，每场1次：下次炸弹到你手上时跳过该回合并原路弹回；倒计时≤0也不在你手上爆，弹回后再爆。",
                 UsesPerMatch = 1
             },
             new ItemDefinition

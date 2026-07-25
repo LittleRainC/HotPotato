@@ -56,6 +56,7 @@ namespace Chardin
         int _defuseCharges;
         float _decisionDeadline;
         bool _busy;
+        bool _reflectGloveArmed;
         Phase _phase = Phase.Boot;
         BombAction? _pendingPlayerAction;
 
@@ -161,6 +162,7 @@ namespace Chardin
             StopAllCoroutines();
             _busy = false;
             _pendingPlayerAction = null;
+            _reflectGloveArmed = false;
             _hearts = startingHearts;
             _passDirection = 1;
             _previousHolderIndex = -1;
@@ -214,6 +216,7 @@ namespace Chardin
                     clockwiseOrder[i].ResetSeat();
             }
 
+            _reflectGloveArmed = false;
             _defuseCharges = sharedDefusePerMatch + RunInventory.DefuseBonus;
             hud.SetDefuseCharges(_defuseCharges);
 
@@ -480,9 +483,63 @@ namespace Chardin
             MoveBombToHolder();
             bomb.SetViewerIsHolder(IsPlayerHolder());
 
+            // 反弹手套：炸弹到玩家位 → 跳过该回合，原路弹回；≤0 也不在玩家手上爆，弹回后再爆
+            if (IsPlayerHolder() && _reflectGloveArmed && TryGetAliveBounceTarget(out int bounceTo))
+            {
+                yield return ResolveReflectBounce(bounceTo);
+                yield break;
+            }
+
             if (bomb.CheckExplodeOnReceive())
             {
                 yield return HandleExplosion(targetIndex);
+                yield break;
+            }
+
+            yield return new WaitForSeconds(0.12f);
+            _busy = false;
+            BeginHolderTurn();
+        }
+
+        bool TryGetAliveBounceTarget(out int bounceTo)
+        {
+            bounceTo = _previousHolderIndex;
+            if (bounceTo >= 0 && bounceTo < clockwiseOrder.Count
+                && clockwiseOrder[bounceTo] != null && clockwiseOrder[bounceTo].IsAlive
+                && bounceTo != _holderIndex)
+                return true;
+
+            bounceTo = GetClockwiseNextIndex(_holderIndex);
+            return bounceTo >= 0;
+        }
+
+        IEnumerator ResolveReflectBounce(int bounceTo)
+        {
+            _reflectGloveArmed = false;
+            int playerIndex = _holderIndex;
+            _passDirection *= -1;
+
+            hud.SetBroadcast("反弹手套：跳过回合，原路弹回！");
+            yield return new WaitForSeconds(0.12f);
+
+            TableSeat fromSeat = clockwiseOrder[playerIndex];
+            TableSeat toSeat = clockwiseOrder[bounceTo];
+            Vector3 fromPos = bomb != null ? bomb.transform.position : fromSeat.BombAnchor.position;
+            Vector3 toPos = toSeat != null ? toSeat.BombAnchor.position : fromPos;
+
+            if (transferFx != null)
+                yield return transferFx.PlayPass(bomb.transform, fromPos, toPos, toSeat, null);
+            else
+                yield return new WaitForSeconds(0.35f);
+
+            _previousHolderIndex = playerIndex;
+            _holderIndex = bounceTo;
+            MoveBombToHolder();
+            bomb.SetViewerIsHolder(IsPlayerHolder());
+
+            if (bomb.CheckExplodeOnReceive())
+            {
+                yield return HandleExplosion(bounceTo);
                 yield break;
             }
 
@@ -625,12 +682,48 @@ namespace Chardin
 
         public bool TryUsePeek()
         {
-            if (_phase != Phase.AwaitingPlayerAction || !IsPlayerHolder())
+            // 窥视：仅敌人持弹（敌人回合）时可查看精确倒计时；玩家回合不可用
+            if (_busy || bomb == null || _phase == Phase.MatchOver || _phase == Phase.Boot)
+                return false;
+            if (IsPlayerHolder() || _phase == Phase.AwaitingPlayerAction || _phase == Phase.AimingShove)
+            {
+                hud.SetBroadcast("窥视只能在敌人持弹时使用");
+                return false;
+            }
+            if (_phase != Phase.AwaitingAiAction)
                 return false;
             if (!RunInventory.TryConsume(ItemId.Peek))
                 return false;
             hud.SetBroadcast($"窥视：当前精确倒计时为 {bomb.Logic.Countdown}");
             return true;
+        }
+
+        /// <summary>窥视是否当前可点（敌人持弹等待 AI）。</summary>
+        public bool CanUsePeek()
+        {
+            return !_busy && bomb != null
+                && _phase == Phase.AwaitingAiAction
+                && !IsPlayerHolder();
+        }
+
+        /// <summary>玩家回合主动道具（命运骰等）。</summary>
+        public bool CanUsePlayerTurnItem()
+        {
+            return !_busy
+                && _phase == Phase.AwaitingPlayerAction
+                && IsPlayerHolder();
+        }
+
+        /// <summary>反弹手套是否已点亮，等待下次炸弹到手。</summary>
+        public bool IsReflectGloveArmed => _reflectGloveArmed;
+
+        /// <summary>反弹手套：对局中任意时刻可激活（未就绪时）。</summary>
+        public bool CanUseReflectGlove()
+        {
+            return !_reflectGloveArmed
+                && bomb != null
+                && _phase != Phase.MatchOver
+                && _phase != Phase.Boot;
         }
 
         public bool TryUseFateDie()
@@ -670,33 +763,13 @@ namespace Chardin
 
         public bool TryUseReflectGlove()
         {
-            if (_phase != Phase.AwaitingPlayerAction || _busy || !IsPlayerHolder())
-                return false;
-            if (_previousHolderIndex < 0 || _previousHolderIndex >= clockwiseOrder.Count
-                || !clockwiseOrder[_previousHolderIndex].IsAlive)
+            if (!CanUseReflectGlove())
                 return false;
             if (!RunInventory.TryConsume(ItemId.ReflectGlove))
                 return false;
-            StartCoroutine(ResolveReflectGlove());
+            _reflectGloveArmed = true;
+            hud.SetBroadcast("反弹手套已就绪：下次炸弹到手时跳过回合并原路弹回");
             return true;
-        }
-
-        IEnumerator ResolveReflectGlove()
-        {
-            _busy = true;
-            _phase = Phase.Resolving;
-            hud.SetActionsInteractable(false, false);
-            int playerIndex = _holderIndex;
-            int target = _previousHolderIndex;
-            _passDirection *= -1;
-            _previousHolderIndex = playerIndex;
-            _holderIndex = target;
-            MoveBombToHolder();
-            bomb.SetViewerIsHolder(IsPlayerHolder());
-            hud.SetBroadcast("反弹手套：炸弹原路弹回，传递方向反转！");
-            yield return new WaitForSeconds(0.25f);
-            _busy = false;
-            BeginHolderTurn();
         }
 
         int PickRandomAliveIndex()

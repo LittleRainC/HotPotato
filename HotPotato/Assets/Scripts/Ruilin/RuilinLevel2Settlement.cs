@@ -37,6 +37,7 @@ namespace Ruilin
         bool rewardCommitted;
         bool runtimeInitialized;
         Font font;
+        BattleController.Phase _lastItemBarPhase = BattleController.Phase.Boot;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Bootstrap()
@@ -183,7 +184,16 @@ namespace Ruilin
                 InitializeRuntime();
             if (!runtimeInitialized || battle == null)
                 return;
-            if (settled || battle.CurrentPhase != BattleController.Phase.MatchOver)
+
+            // 回合切换时刷新道具可点状态（Peek 仅敌人回合）
+            var phase = battle.CurrentPhase;
+            if (phase != _lastItemBarPhase)
+            {
+                _lastItemBarPhase = phase;
+                RefreshItemBar();
+            }
+
+            if (settled || phase != BattleController.Phase.MatchOver)
                 return;
 
             settled = true;
@@ -1025,16 +1035,30 @@ namespace Ruilin
                 slot.gameObject.SetActive(true);
                 OwnedItem owned = RunInventory.Items[i];
                 ItemDefinition definition = ItemCatalog.Get(owned.Id);
-                string status = definition.IsActive
-                    ? definition.Name + "\n×" + owned.RemainingUses
-                    : definition.Name + "\n被动";
+                string status;
+                if (owned.Id == ItemId.ReflectGlove && battle != null && battle.IsReflectGloveArmed)
+                    status = definition.Name + "\n已就绪";
+                else if (definition.IsActive)
+                    status = definition.Name + "\n×" + owned.RemainingUses;
+                else
+                    status = definition.Name + "\n被动";
                 ApplyItemVisual(slotButton, definition, status, rewardCardLayout: false);
 
                 if (definition.IsActive && owned.RemainingUses > 0)
                 {
                     ItemId captured = owned.Id;
-                    slotButton.interactable = true;
-                    slotButton.onClick.AddListener(() => UseActiveItem(captured));
+                    bool canUse;
+                    if (captured == ItemId.Peek)
+                        canUse = battle.CanUsePeek();
+                    else if (captured == ItemId.ReflectGlove)
+                        canUse = battle.CanUseReflectGlove();
+                    else
+                        canUse = battle.CanUsePlayerTurnItem();
+                    if (canUse)
+                    {
+                        slotButton.interactable = true;
+                        slotButton.onClick.AddListener(() => UseActiveItem(captured));
+                    }
                 }
             }
         }
