@@ -12,6 +12,7 @@ namespace Chardin
         [SerializeField] Button panelButton;
         [SerializeField] Text speakerText;
         [SerializeField] Text bodyText;
+        [SerializeField] Text hintText;
 
         public event Action PanelClicked;
 
@@ -35,14 +36,20 @@ namespace Chardin
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
 
-            // 半透明遮罩（不挡底部按钮：只盖中上区域也可；这里全屏但 raycast 仅面板）
+            // 独立排序，保证盖在结算/其它 UI 之上
+            var overlayCanvas = gameObject.AddComponent<Canvas>();
+            overlayCanvas.overrideSorting = true;
+            overlayCanvas.sortingOrder = 500;
+            gameObject.AddComponent<GraphicRaycaster>();
+
             var dimGo = CreatePanel("Dim", transform, Vector2.zero, Vector2.one);
             var dimImg = dimGo.GetComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.35f);
+            dimImg.color = new Color(0f, 0f, 0f, 0.45f);
             dimImg.raycastTarget = false;
 
+            // 偏右下、HP 上方，尺寸加大更容易看见
             var panelGo = CreatePanel("Panel", transform,
-                new Vector2(0.55f, 0.22f), new Vector2(0.96f, 0.42f));
+                new Vector2(0.52f, 0.24f), new Vector2(0.97f, 0.52f));
             panelImage = panelGo.GetComponent<Image>();
             panelImage.raycastTarget = true;
             panelImage.preserveAspect = false;
@@ -56,7 +63,7 @@ namespace Chardin
             }
             else
             {
-                panelImage.color = new Color(0.12f, 0.1f, 0.08f, 0.94f);
+                panelImage.color = new Color(0.95f, 0.92f, 0.85f, 0.98f);
             }
 
             panelButton = panelGo.AddComponent<Button>();
@@ -68,10 +75,17 @@ namespace Chardin
             if (font == null)
                 font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-            speakerText = CreateText("Speaker", panelGo.transform, font, 28,
-                new Vector2(0.06f, 0.72f), new Vector2(0.94f, 0.92f), FontStyle.Bold);
+            // 浅色面板用深色字
+            var ink = new Color(0.12f, 0.1f, 0.08f, 1f);
+            speakerText = CreateText("Speaker", panelGo.transform, font, 30,
+                new Vector2(0.06f, 0.74f), new Vector2(0.94f, 0.94f), FontStyle.Bold, ink);
             bodyText = CreateText("Body", panelGo.transform, font, 26,
-                new Vector2(0.06f, 0.12f), new Vector2(0.94f, 0.70f), FontStyle.Normal);
+                new Vector2(0.06f, 0.22f), new Vector2(0.94f, 0.72f), FontStyle.Normal, ink);
+            hintText = CreateText("Hint", panelGo.transform, font, 18,
+                new Vector2(0.06f, 0.04f), new Vector2(0.94f, 0.20f), FontStyle.Italic,
+                new Color(0.25f, 0.22f, 0.18f, 0.85f));
+            hintText.alignment = TextAnchor.LowerRight;
+            hintText.text = "Click to continue";
 
             transform.SetAsLastSibling();
             Hide();
@@ -103,7 +117,7 @@ namespace Chardin
         }
 
         static Text CreateText(string name, Transform parent, Font font, int size,
-            Vector2 anchorMin, Vector2 anchorMax, FontStyle style)
+            Vector2 anchorMin, Vector2 anchorMax, FontStyle style, Color color)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             go.transform.SetParent(parent, false);
@@ -116,7 +130,7 @@ namespace Chardin
             text.font = font;
             text.fontSize = size;
             text.fontStyle = style;
-            text.color = Color.white;
+            text.color = color;
             text.alignment = TextAnchor.UpperLeft;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
@@ -132,6 +146,8 @@ namespace Chardin
                 speakerText.text = string.IsNullOrEmpty(speaker) ? "" : speaker;
             if (bodyText != null)
                 bodyText.text = body ?? "";
+            if (hintText != null)
+                hintText.text = clickable ? "Click to continue" : "Follow the highlighted action";
             SetClickable(clickable);
             transform.SetAsLastSibling();
         }
@@ -141,7 +157,9 @@ namespace Chardin
             if (panelButton != null)
                 panelButton.interactable = clickable;
             if (panelImage != null)
-                panelImage.raycastTarget = clickable;
+                panelImage.raycastTarget = true; // 始终可接收，非 bubble 时由 controller 忽略
+            if (panelButton != null && !clickable)
+                panelButton.interactable = false;
         }
 
         public void Hide()

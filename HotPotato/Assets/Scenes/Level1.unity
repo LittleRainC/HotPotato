@@ -444,6 +444,7 @@ GameObject:
   - component: {fileID: 500001}
   - component: {fileID: 500003}
   - component: {fileID: 500004}
+  - component: {fileID: 500005}
   m_Layer: 0
   m_Name: Battle_2P
   m_TagString: Untagged
@@ -2205,6 +2206,18 @@ MonoBehaviour:
   enemyMask:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!114 &500005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 300014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f0711aba70ed65438201dc4744ceb99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &67887873
 PrefabInstance:
   m_ObjectHideFlags: 0

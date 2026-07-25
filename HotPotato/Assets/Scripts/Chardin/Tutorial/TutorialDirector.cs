@@ -21,7 +21,13 @@ namespace Chardin
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Bootstrap()
         {
-            if (SceneManager.GetActiveScene().name != "tutorial")
+            TryAttachToBattle();
+        }
+
+        /// <summary>也可由 BattleController 在 Level1 主动调用。</summary>
+        public static void TryAttachToBattle()
+        {
+            if (SceneManager.GetActiveScene().name != "Level1")
                 return;
 
             var battle = Object.FindObjectOfType<BattleController>();
@@ -39,10 +45,15 @@ namespace Chardin
                 _hud = _battle.GetComponent<BattleHud>();
             if (_battle != null)
                 _battle.ForcePlayerFirstHolder = true;
+
+            Debug.Log("[Tutorial] TutorialDirector Awake on " + gameObject.name
+                      + " scene=" + SceneManager.GetActiveScene().name);
         }
 
         void OnEnable()
         {
+            if (_battle == null)
+                _battle = GetComponent<BattleController>();
             if (_battle != null)
                 _battle.PlayerActionResolved += OnPlayerActionResolved;
         }
@@ -60,6 +71,13 @@ namespace Chardin
             if (_started)
                 return;
             _started = true;
+            // 等一帧，确保 Canvas / Hud 绑定完成
+            StartCoroutine(BeginTutorialNextFrame());
+        }
+
+        System.Collections.IEnumerator BeginTutorialNextFrame()
+        {
+            yield return null;
             BeginTutorial();
         }
 

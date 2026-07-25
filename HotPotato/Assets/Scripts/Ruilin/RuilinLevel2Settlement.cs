@@ -8,7 +8,7 @@ namespace Ruilin
 {
     /// <summary>
     /// 关卡结算UI。无需改场景；进入 RunLevelOrder 中的关卡时自动挂到 BattleController。
-    /// NEXT：tutorial → Level1 → Level2 → Level3 → Level4 → Level5（Tutorial 通关跳过选道具）。
+    /// NEXT：Level1（教学）→ Level2 → Level3 → Level4 → Level5（Level1 通关跳过选道具）。
     /// </summary>
     [ExecuteAlways]
     public sealed class RuilinLevel2Settlement : MonoBehaviour
@@ -16,10 +16,12 @@ namespace Ruilin
         /// <summary>与 Build Settings 中启用的关卡顺序一致：赢关后按此链加载下一关。</summary>
         static readonly string[] RunLevelOrder =
         {
-            "tutorial", "Level1", "Level2", "Level3", "Level4", "Level5"
+            "Level1", "Level2", "Level3", "Level4", "Level5"
         };
 
-        const string TutorialSceneName = "tutorial";
+        /// <summary>教学关：有对话引导，通关不发道具。</summary>
+        const string TutorialSceneName = "Level1";
+        const string AfterTutorialSceneName = "Level2";
 
         BattleController battle;
         Canvas canvas;
@@ -163,7 +165,7 @@ namespace Ruilin
             if (playerAlive && !enemyAlive)
             {
                 if (SceneManager.GetActiveScene().name == TutorialSceneName)
-                    FinishTutorialToLevel1();
+                    FinishTutorialAndContinue();
                 else
                     ShowRewards();
             }
@@ -171,11 +173,11 @@ namespace Ruilin
                 ShowGameOver();
         }
 
-        void FinishTutorialToLevel1()
+        void FinishTutorialAndContinue()
         {
             Time.timeScale = 1f;
-            // Tutorial 不发道具，直接进入 Level1
-            SceneManager.LoadScene("Level1");
+            // Tutorial 不发道具，直接进入 Level2
+            SceneManager.LoadScene(AfterTutorialSceneName);
         }
 
         void ShowGameOver()

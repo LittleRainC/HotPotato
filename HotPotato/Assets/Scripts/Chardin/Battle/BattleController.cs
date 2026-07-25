@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
 using Ruilin;
 
@@ -112,6 +113,11 @@ namespace Chardin
 
         void Start()
         {
+            if (SceneManager.GetActiveScene().name == "Level1")
+            {
+                ForcePlayerFirstHolder = true;
+                TutorialDirector.TryAttachToBattle();
+            }
             BeginMatch();
         }
 
