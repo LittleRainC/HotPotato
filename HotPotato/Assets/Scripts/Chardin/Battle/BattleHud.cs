@@ -81,6 +81,7 @@ namespace Chardin
             ApplyDefuseBadgeArt();
             EnsureFullscreenDamageFlash(canvas);
             WireButtons();
+            EnsureActionButtonHovers();
             SetDecisionTimerVisible(false);
         }
 
@@ -120,9 +121,9 @@ namespace Chardin
             badge.anchorMin = new Vector2(0.5f, 0.5f);
             badge.anchorMax = new Vector2(0.5f, 0.5f);
             badge.pivot = new Vector2(0.5f, 0.5f);
-            badge.anchoredPosition = new Vector2(8f, 10f);
+            badge.anchoredPosition = new Vector2(28f, 28f);
             badge.sizeDelta = new Vector2(70f, 70f);
-            badge.localScale = new Vector3(0.15f, 0.15f, 0.15f);
+            badge.localScale = new Vector3(0.3f, 0.3f, 0.3f);
 
             var img = badge.GetComponent<Image>();
             if (img != null)
@@ -327,6 +328,28 @@ namespace Chardin
                 btnDefuse.onClick.RemoveAllListeners();
                 btnDefuse.onClick.AddListener(() => ActionClicked?.Invoke(BombAction.Defuse));
             }
+        }
+
+        void EnsureActionButtonHovers()
+        {
+            SetupButtonHover(btnDefuse, "skill1", "skill11");
+            SetupButtonHover(btnPass, "skill2", "skill22");
+            SetupButtonHover(btnShove, "skill3", "skill33");
+        }
+
+        void SetupButtonHover(Button button, string normalName, string hoverName)
+        {
+            if (button == null)
+                return;
+
+            var hover = button.GetComponent<UiButtonHoverSprite>();
+            if (hover == null)
+                hover = button.gameObject.AddComponent<UiButtonHoverSprite>();
+
+            const string folder = "Assets/Art/美术素材/Button/";
+            Sprite normal = LoadUiSprite(normalName, folder + normalName + ".png");
+            Sprite hoverSp = LoadUiSprite(hoverName, folder + hoverName + ".png");
+            hover.Configure(normal, hoverSp);
         }
 
         public void SetOpponentName(string name)
