@@ -87,6 +87,38 @@ namespace Ruilin
                     return AllItems[i];
             throw new ArgumentOutOfRangeException(nameof(id), id, null);
         }
+
+        /// <summary>道具卡立绘：Resources/UI/Cards，编辑器可回退到 Art/美术素材/Cards。</summary>
+        public static Sprite GetIcon(ItemId id)
+        {
+            string file = IconFileName(id);
+            if (string.IsNullOrEmpty(file))
+                return null;
+
+            Sprite fromRes = Resources.Load<Sprite>("UI/Cards/" + file);
+            if (fromRes != null)
+                return fromRes;
+
+#if UNITY_EDITOR
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/Art/美术素材/Cards/" + file + ".png");
+#else
+            return null;
+#endif
+        }
+
+        static string IconFileName(ItemId id)
+        {
+            switch (id)
+            {
+                case ItemId.Peek: return "ico_item_peek_01";
+                case ItemId.WireCutter: return "ico_item_defusekit_01";
+                case ItemId.SteadyHand: return "ico_item_stablehand_01";
+                case ItemId.ReflectGlove: return "ico_item_glove_01";
+                case ItemId.FateDie: return "ico_item_dice_01";
+                default: return null;
+            }
+        }
     }
 
     /// <summary>
@@ -172,11 +204,14 @@ namespace Ruilin
 
         /// <summary>
         /// 跨关卡续跑标记：NextLevel / 本关重开前写入；新开 Play 未带标记则清空背包。
+        /// 同时写内存 + PlayerPrefs，避免切场景时只靠 Prefs 丢失。
         /// </summary>
         const string ContinueKey = "Ruilin.RunContinue";
+        static bool ContinueInMemory;
 
         public static void MarkRunContinuing()
         {
+            ContinueInMemory = true;
             PlayerPrefs.SetInt(ContinueKey, 1);
             PlayerPrefs.Save();
         }
@@ -184,13 +219,32 @@ namespace Ruilin
         /// <returns>true = 从上一关或本关重开续跑，不要清空背包。</returns>
         public static bool ConsumeRunContinuing()
         {
-            bool continuing = PlayerPrefs.GetInt(ContinueKey, 0) == 1;
-            if (continuing)
+            bool continuing = ContinueInMemory || PlayerPrefs.GetInt(ContinueKey, 0) == 1;
+            ContinueInMemory = false;
+            if (PlayerPrefs.GetInt(ContinueKey, 0) == 1)
             {
                 PlayerPrefs.SetInt(ContinueKey, 0);
                 PlayerPrefs.Save();
             }
             return continuing;
+        }
+
+        /// <summary>新开一局（Start 菜单）时清续跑标记。</summary>
+        public static void ClearContinueFlag()
+        {
+            ContinueInMemory = false;
+            PlayerPrefs.DeleteKey(ContinueKey);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>若内存背包为空则从 PlayerPrefs 再读一次（防切场景丢静态状态）。</summary>
+        public static void EnsureLoadedFromPrefs()
+        {
+            if (ItemsInternal.Count > 0)
+                return;
+            Load();
+            if (ItemsInternal.Count > 0)
+                Changed?.Invoke();
         }
 
         static void Save()

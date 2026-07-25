@@ -12,7 +12,6 @@ namespace Chardin
         [SerializeField] Button panelButton;
         [SerializeField] Text speakerText;
         [SerializeField] Text bodyText;
-        [SerializeField] Text hintText;
 
         public event Action PanelClicked;
 
@@ -44,27 +43,36 @@ namespace Chardin
 
             var dimGo = CreatePanel("Dim", transform, Vector2.zero, Vector2.one);
             var dimImg = dimGo.GetComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.45f);
+            dimImg.color = new Color(0f, 0f, 0f, 0f); // 透明遮罩，不挡画面
             dimImg.raycastTarget = false;
 
-            // 偏右下、HP 上方，尺寸加大更容易看见
+            // 右下区域；x=1350 y=0（相对画布左下，右下角 pivot）
             var panelGo = CreatePanel("Panel", transform,
-                new Vector2(0.52f, 0.24f), new Vector2(0.97f, 0.52f));
+                new Vector2(0f, 0f), new Vector2(0f, 0f));
+            var panelRt = panelGo.GetComponent<RectTransform>();
+            panelRt.pivot = new Vector2(1f, 0f);
+            panelRt.anchoredPosition = new Vector2(1930f, 0f);
+
             panelImage = panelGo.GetComponent<Image>();
             panelImage.raycastTarget = true;
+            panelImage.type = Image.Type.Simple;
             panelImage.preserveAspect = false;
-            panelImage.type = Image.Type.Sliced;
 
             Sprite panelSprite = LoadPanelSprite();
+            float targetW = 820f;
+            float aspect = 1f;
             if (panelSprite != null)
             {
                 panelImage.sprite = panelSprite;
                 panelImage.color = Color.white;
+                if (panelSprite.rect.height > 0.01f)
+                    aspect = panelSprite.rect.width / panelSprite.rect.height;
             }
             else
             {
-                panelImage.color = new Color(0.95f, 0.92f, 0.85f, 0.98f);
+                panelImage.color = new Color(0.85f, 0.85f, 0.85f, 0.98f);
             }
+            panelRt.sizeDelta = new Vector2(targetW, targetW / aspect);
 
             panelButton = panelGo.AddComponent<Button>();
             panelButton.transition = Selectable.Transition.None;
@@ -75,17 +83,19 @@ namespace Chardin
             if (font == null)
                 font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-            // 浅色面板用深色字
-            var ink = new Color(0.12f, 0.1f, 0.08f, 1f);
-            speakerText = CreateText("Speaker", panelGo.transform, font, 30,
-                new Vector2(0.06f, 0.74f), new Vector2(0.94f, 0.94f), FontStyle.Bold, ink);
-            bodyText = CreateText("Body", panelGo.transform, font, 26,
-                new Vector2(0.06f, 0.22f), new Vector2(0.94f, 0.72f), FontStyle.Normal, ink);
-            hintText = CreateText("Hint", panelGo.transform, font, 18,
-                new Vector2(0.06f, 0.04f), new Vector2(0.94f, 0.20f), FontStyle.Italic,
-                new Color(0.25f, 0.22f, 0.18f, 0.85f));
-            hintText.alignment = TextAnchor.LowerRight;
-            hintText.text = "Click to continue";
+            // 文字区：对齐 chatbox 不透明中部；加高以容纳倾斜 speaker
+            var textAreaGo = CreatePanel("TextArea", panelGo.transform,
+                new Vector2(0.20f, 0.34f), new Vector2(0.78f, 0.64f));
+            var textAreaImg = textAreaGo.GetComponent<Image>();
+            textAreaImg.color = Color.clear;
+            textAreaImg.raycastTarget = false;
+            textAreaGo.AddComponent<RectMask2D>();
+
+            var ink = new Color(0.08f, 0.08f, 0.08f, 1f);
+            speakerText = CreateText("Speaker", textAreaGo.transform, font, 26,
+                new Vector2(0f, 0.54f), new Vector2(0.92f, 0.82f), FontStyle.Bold, ink, 20f);
+            bodyText = CreateText("Body", textAreaGo.transform, font, 22,
+                new Vector2(0f, -0.06f), new Vector2(0.92f, 0.50f), FontStyle.Normal, ink, 3f);
 
             transform.SetAsLastSibling();
             Hide();
@@ -93,12 +103,12 @@ namespace Chardin
 
         static Sprite LoadPanelSprite()
         {
-            var fromRes = Resources.Load<Sprite>("UI/ui_panel_generic_01");
+            var fromRes = Resources.Load<Sprite>("UI/chatbox");
             if (fromRes != null)
                 return fromRes;
 #if UNITY_EDITOR
             return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
-                "Assets/Art/美术素材/UI/ui_panel_generic_01.png");
+                "Assets/Art/美术素材/UI/chatbox.png");
 #else
             return null;
 #endif
@@ -117,15 +127,17 @@ namespace Chardin
         }
 
         static Text CreateText(string name, Transform parent, Font font, int size,
-            Vector2 anchorMin, Vector2 anchorMax, FontStyle style, Color color)
+            Vector2 anchorMin, Vector2 anchorMax, FontStyle style, Color color, float zRotation = 0f)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             go.transform.SetParent(parent, false);
             var rt = (RectTransform)go.transform;
             rt.anchorMin = anchorMin;
             rt.anchorMax = anchorMax;
+            rt.pivot = new Vector2(0f, 1f);
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
+            rt.localEulerAngles = new Vector3(0f, 0f, zRotation);
             var text = go.GetComponent<Text>();
             text.font = font;
             text.fontSize = size;
@@ -146,8 +158,6 @@ namespace Chardin
                 speakerText.text = string.IsNullOrEmpty(speaker) ? "" : speaker;
             if (bodyText != null)
                 bodyText.text = body ?? "";
-            if (hintText != null)
-                hintText.text = clickable ? "Click to continue" : "Follow the highlighted action";
             SetClickable(clickable);
             transform.SetAsLastSibling();
         }

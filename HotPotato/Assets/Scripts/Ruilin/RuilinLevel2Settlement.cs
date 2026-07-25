@@ -8,7 +8,7 @@ namespace Ruilin
 {
     /// <summary>
     /// 关卡结算UI。无需改场景；进入 RunLevelOrder 中的关卡时自动挂到 BattleController。
-    /// NEXT：Level1（教学）→ Level2 → Level3 → Level4 → Level5（Level1 通关跳过选道具）。
+    /// 每关获胜选道具 → 继承到下一关；Level5 选完清空背包并回 Start。
     /// </summary>
     [ExecuteAlways]
     public sealed class RuilinLevel2Settlement : MonoBehaviour
@@ -19,9 +19,9 @@ namespace Ruilin
             "Level1", "Level2", "Level3", "Level4", "Level5"
         };
 
-        /// <summary>教学关：有对话引导，通关不发道具。</summary>
+        /// <summary>教学关：开局无续跑标记时清空背包；每关通关都选卡并继承到下一关。</summary>
         const string TutorialSceneName = "Level1";
-        const string AfterTutorialSceneName = "Level2";
+        const string StartSceneName = "Start";
 
         BattleController battle;
         Canvas canvas;
@@ -77,7 +77,8 @@ namespace Ruilin
             if (font == null)
                 font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
-            canvas = Object.FindObjectOfType<Canvas>();
+            // 必须用战斗根 Canvas（含 BottomBar），不能 FindObjectOfType——结算层嵌套 Canvas 会抢先
+            canvas = FindBattleCanvas();
             if (battle == null || canvas == null)
             {
                 Debug.LogError("[Ruilin] Level2需要BattleController和Canvas。");
@@ -86,23 +87,58 @@ namespace Ruilin
             }
 
             runtimeInitialized = true;
+            // 先绑道具栏（依赖战斗 Canvas），再给结算层加嵌套 Canvas，避免找错 Canvas
             if (!BindExistingUi())
                 BuildUi();
             else
                 WireUiButtons();
             EnsurePlayerBombItemBar();
             HideLegacyItemBar();
+            EnsureSettlementOverlayCanvases();
 
-            // 直接进关卡（或新开 Play）会带上 PlayerPrefs 旧背包；仅续关/重开时保留。
-            // Tutorial 开局始终清空，避免旧进度干扰教学。
-            if (SceneManager.GetActiveScene().name == TutorialSceneName)
+            // 无续跑标记：新开一局清空；有续跑：继承上一关道具
+            bool continuing = RunInventory.ConsumeRunContinuing();
+            if (continuing)
+            {
+                RunInventory.EnsureLoadedFromPrefs();
+            }
+            else
+            {
+                // Start→Level1，或直接进关，都视为新 Run
                 RunInventory.ClearRun();
-            else if (!RunInventory.ConsumeRunContinuing())
-                RunInventory.ClearRun();
+            }
+            Debug.Log("[Ruilin] Enter " + SceneManager.GetActiveScene().name +
+                      " continuing=" + continuing +
+                      " items=" + RunInventory.Items.Count);
 
             RunInventory.ResetUsesForMatch();
             RunInventory.Changed += RefreshItemBar;
             RefreshItemBar();
+        }
+
+        Canvas FindBattleCanvas()
+        {
+            if (battle != null)
+            {
+                Transform underBattle = battle.transform.Find("Canvas");
+                if (underBattle != null)
+                {
+                    var c = underBattle.GetComponent<Canvas>();
+                    if (c != null)
+                        return c;
+                }
+            }
+
+            Canvas[] all = Object.FindObjectsOfType<Canvas>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] == null)
+                    continue;
+                if (all[i].transform.Find("BottomBar") != null)
+                    return all[i];
+            }
+
+            return Object.FindObjectOfType<Canvas>();
         }
 
         void OnEnable()
@@ -116,7 +152,9 @@ namespace Ruilin
         void EnsureEditableHierarchy()
         {
 #if UNITY_EDITOR
-            canvas = Object.FindObjectOfType<Canvas>();
+            canvas = FindBattleCanvas();
+            if (canvas == null)
+                canvas = Object.FindObjectOfType<Canvas>();
             if (canvas == null || canvas.transform.Find("RuilinGameOver") != null)
                 return;
             battle = GetComponent<BattleController>();
@@ -163,26 +201,19 @@ namespace Ruilin
             }
 
             if (playerAlive && !enemyAlive)
-            {
-                if (SceneManager.GetActiveScene().name == TutorialSceneName)
-                    FinishTutorialAndContinue();
-                else
-                    ShowRewards();
-            }
+                ShowRewards();
             else
                 ShowGameOver();
         }
 
-        void FinishTutorialAndContinue()
-        {
-            Time.timeScale = 1f;
-            // Tutorial 不发道具，直接进入 Level2
-            SceneManager.LoadScene(AfterTutorialSceneName);
-        }
-
         void ShowGameOver()
         {
-            gameOverPanel.SetActive(true);
+            EnsureSettlementOverlayCanvases();
+            if (gameOverPanel != null)
+            {
+                gameOverPanel.transform.SetAsLastSibling();
+                gameOverPanel.SetActive(true);
+            }
             Time.timeScale = 0f;
         }
 
@@ -190,18 +221,226 @@ namespace Ruilin
         {
             Time.timeScale = 1f;
             RunInventory.ResetUsesForMatch();
-            RunInventory.MarkRunContinuing(); // 本关重开保留背包
+            RunInventory.MarkRunContinuing();
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
         void ShowRewards()
         {
+            EnsureSettlementOverlayCanvases();
+            EnsureRewardDim();
+            LayoutRewardCards();
             RollTwoRewards();
             rewardCommitted = false;
             pendingReward = null;
-            nextButton.gameObject.SetActive(false);
-            rewardPanel.SetActive(true);
+            if (nextButton != null)
+                nextButton.gameObject.SetActive(false);
+            if (rewardPanel != null)
+            {
+                // 提到 OverlayHost 最前，盖住 BottomBar / ActionButtons
+                rewardPanel.transform.SetAsLastSibling();
+                rewardPanel.SetActive(true);
+            }
             Time.timeScale = 0f;
+        }
+
+        /// <summary>结算时压暗全屏背景，卡牌在遮罩之上。</summary>
+        void EnsureRewardDim()
+        {
+            if (rewardPanel == null)
+                return;
+
+            var panelRt = rewardPanel.GetComponent<RectTransform>();
+            panelRt.anchorMin = Vector2.zero;
+            panelRt.anchorMax = Vector2.one;
+            panelRt.offsetMin = Vector2.zero;
+            panelRt.offsetMax = Vector2.zero;
+            panelRt.localScale = Vector3.one;
+            panelRt.anchoredPosition = Vector2.zero;
+
+            var parentImg = rewardPanel.GetComponent<Image>();
+            if (parentImg != null)
+            {
+                parentImg.sprite = null;
+                parentImg.color = new Color(0f, 0f, 0f, 0f);
+                parentImg.raycastTarget = true;
+            }
+
+            Transform dimTf = rewardPanel.transform.Find("FullDim");
+            Image dimImg;
+            if (dimTf == null)
+            {
+                var go = new GameObject("FullDim", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                go.transform.SetParent(rewardPanel.transform, false);
+                dimTf = go.transform;
+                dimImg = go.GetComponent<Image>();
+            }
+            else
+            {
+                dimImg = dimTf.GetComponent<Image>();
+                if (dimImg == null)
+                    dimImg = dimTf.gameObject.AddComponent<Image>();
+            }
+
+            var dimRt = (RectTransform)dimTf;
+            dimRt.anchorMin = Vector2.zero;
+            dimRt.anchorMax = Vector2.one;
+            dimRt.pivot = new Vector2(0.5f, 0.5f);
+            dimRt.anchoredPosition = new Vector2(0f, 400f);
+            dimRt.offsetMin = Vector2.zero;
+            dimRt.offsetMax = Vector2.zero;
+            dimRt.localScale = new Vector3(3f, 10f, 1f);
+            dimRt.SetAsFirstSibling();
+            dimImg.sprite = null;
+            dimImg.color = new Color(0f, 0f, 0f, 0.82f);
+            dimImg.raycastTarget = true;
+        }
+
+        /// <summary>
+        /// 结算层挂到独立 ScreenSpaceOverlay Host（sorting 5000），
+        /// 避免嵌在战斗 Canvas 下时被 ActionButtons(600)/道具栏(650) 盖住。
+        /// </summary>
+        void EnsureSettlementOverlayCanvases()
+        {
+            Transform host = EnsureOverlayHost();
+            PromoteToOverlayHost(rewardPanel, host);
+            PromoteToOverlayHost(replacePanel, host);
+            PromoteToOverlayHost(gameOverPanel, host);
+        }
+
+        Transform EnsureOverlayHost()
+        {
+            const string hostName = "RuilinOverlayHost";
+            Transform parent = null;
+            if (canvas != null)
+                parent = canvas.transform.parent; // Battle_2P
+            if (parent == null && battle != null)
+                parent = battle.transform;
+
+            Transform host = null;
+            if (parent != null)
+                host = parent.Find(hostName);
+            if (host == null)
+            {
+                // 全局再找一次（避免重复创建）
+                var existing = GameObject.Find(hostName);
+                if (existing != null)
+                    host = existing.transform;
+            }
+
+            if (host == null)
+            {
+                var go = new GameObject(hostName, typeof(RectTransform), typeof(Canvas),
+                    typeof(CanvasScaler), typeof(GraphicRaycaster));
+                if (parent != null)
+                    go.transform.SetParent(parent, false);
+                host = go.transform;
+            }
+
+            var hostCanvas = host.GetComponent<Canvas>();
+            if (hostCanvas == null)
+                hostCanvas = host.gameObject.AddComponent<Canvas>();
+            hostCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            hostCanvas.overrideSorting = true;
+            hostCanvas.sortingOrder = 5000;
+
+            if (host.GetComponent<GraphicRaycaster>() == null)
+                host.gameObject.AddComponent<GraphicRaycaster>();
+
+            var scaler = host.GetComponent<CanvasScaler>();
+            if (scaler == null)
+                scaler = host.gameObject.AddComponent<CanvasScaler>();
+            var mainScaler = canvas != null ? canvas.GetComponent<CanvasScaler>() : null;
+            if (mainScaler != null)
+            {
+                scaler.uiScaleMode = mainScaler.uiScaleMode;
+                scaler.referenceResolution = mainScaler.referenceResolution;
+                scaler.screenMatchMode = mainScaler.screenMatchMode;
+                scaler.matchWidthOrHeight = mainScaler.matchWidthOrHeight;
+            }
+            else
+            {
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.matchWidthOrHeight = 0.5f;
+            }
+
+            host.SetAsLastSibling();
+            return host;
+        }
+
+        static void PromoteToOverlayHost(GameObject panel, Transform host)
+        {
+            if (panel == null || host == null)
+                return;
+
+            if (panel.transform.parent != host)
+                panel.transform.SetParent(host, false);
+
+            var rt = panel.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.anchoredPosition = Vector2.zero;
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+                rt.localScale = Vector3.one;
+                rt.localRotation = Quaternion.identity;
+            }
+
+            // 去掉面板上的嵌套 Canvas，统一由 Host 排序，避免再被战斗 UI 盖住
+            var nestedRaycaster = panel.GetComponent<GraphicRaycaster>();
+            if (nestedRaycaster != null)
+                Object.DestroyImmediate(nestedRaycaster);
+            var nestedCanvas = panel.GetComponent<Canvas>();
+            if (nestedCanvas != null)
+                Object.DestroyImmediate(nestedCanvas);
+        }
+
+        static void EnsureOverlayCanvas(GameObject panel, int sortingOrder)
+        {
+            // 兼容旧调用：仍强制提到高 sorting（若尚未 Promote）
+            if (panel == null)
+                return;
+            var c = panel.GetComponent<Canvas>();
+            if (c == null)
+                c = panel.AddComponent<Canvas>();
+            c.renderMode = RenderMode.ScreenSpaceOverlay;
+            c.overrideSorting = true;
+            c.sortingOrder = sortingOrder;
+            if (panel.GetComponent<GraphicRaycaster>() == null)
+                panel.AddComponent<GraphicRaycaster>();
+        }
+
+        void LayoutRewardCards()
+        {
+            LayoutOneRewardCard(rewardCards[0], new Vector2(-430f, 30f));
+            LayoutOneRewardCard(rewardCards[1], new Vector2(430f, 30f));
+            if (nextButton == null)
+                return;
+            var rt = nextButton.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = new Vector2(0f, 56f);
+            rt.sizeDelta = new Vector2(320f, 80f);
+            var label = nextButton.GetComponentInChildren<Text>(true);
+            if (label != null)
+                label.fontSize = 36;
+        }
+
+        static void LayoutOneRewardCard(Button card, Vector2 anchoredPos)
+        {
+            if (card == null)
+                return;
+            var rt = card.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = anchoredPos;
+            rt.sizeDelta = new Vector2(780f, 1050f);
+            rt.localScale = Vector3.one;
+            card.transition = Selectable.Transition.None;
         }
 
         void RollTwoRewards()
@@ -212,7 +451,6 @@ namespace Ruilin
                 if (!RunInventory.Contains(all[i].Id))
                     candidates.Add(all[i]);
 
-            // 已收集四件以上时允许池中重新出现已有道具，避免候选不足。
             if (candidates.Count < 2)
                 for (int i = 0; i < all.Count; i++)
                     if (!candidates.Contains(all[i]))
@@ -241,8 +479,12 @@ namespace Ruilin
 
             if (RunInventory.Items.Count < RunInventory.Capacity)
             {
-                RunInventory.TryAdd(pendingReward.Id);
-                nextButton.gameObject.SetActive(true);
+                if (!RunInventory.TryAdd(pendingReward.Id))
+                    Debug.LogWarning("[Ruilin] TryAdd 失败 id=" + pendingReward.Id);
+                Debug.Log("[Ruilin] Chose reward " + pendingReward.Name +
+                          " inventory=" + RunInventory.Items.Count);
+                RunInventory.MarkRunContinuing();
+                NextLevel();
             }
             else
             {
@@ -258,17 +500,132 @@ namespace Ruilin
                 return;
             }
 
-            // 提到最前，避免被奖励层挡住点击
+            if (RunInventory.Items.Count < 2)
+            {
+                Debug.LogError("[Ruilin] 替换需要已有 2 件道具，当前=" + RunInventory.Items.Count);
+                if (nextButton != null)
+                    nextButton.gameObject.SetActive(true);
+                return;
+            }
+
+            EnsureSettlementOverlayCanvases();
+
+            // 选卡层先关掉，避免盖住替换层；替换层提到 OverlayHost 最前
+            if (rewardPanel != null)
+                rewardPanel.SetActive(false);
+
+            var replaceImg = replacePanel.GetComponent<Image>();
+            if (replaceImg != null)
+            {
+                replaceImg.sprite = null;
+                replaceImg.color = new Color(0f, 0f, 0f, 0.88f);
+                replaceImg.raycastTarget = true;
+            }
+
+            EnsureReplaceDim();
+
+            Text title = replacePanel.GetComponentInChildren<Text>(true);
+            if (title != null && title.transform.parent == replacePanel.transform)
+            {
+                title.text = "道具栏已满，请选择要替换的道具";
+                title.fontSize = 42;
+                title.color = Color.white;
+                var trt = title.rectTransform;
+                trt.anchorMin = new Vector2(0.1f, 0.82f);
+                trt.anchorMax = new Vector2(0.9f, 0.95f);
+                trt.offsetMin = Vector2.zero;
+                trt.offsetMax = Vector2.zero;
+                title.transform.SetAsLastSibling();
+            }
+
+            Button[] slotButtons = EnsureReplaceSlotButtons();
+            if (slotButtons == null || slotButtons.Length < 2)
+            {
+                Debug.LogError("[Ruilin] 替换槽位未就绪");
+                if (nextButton != null)
+                    nextButton.gameObject.SetActive(true);
+                return;
+            }
+
+            for (int i = 0; i < 2; i++)
+            {
+                Button button = slotButtons[i];
+                if (button == null)
+                    continue;
+
+                LayoutOneRewardCard(button, new Vector2(i == 0 ? -430f : 430f, 30f));
+
+                int captured = i;
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(() => ReplaceItem(captured));
+                button.interactable = true;
+
+                ItemDefinition ownedDef = ItemCatalog.Get(RunInventory.Items[i].Id);
+                ApplyRewardCardVisual(button, ownedDef);
+                // 标题改为提示替换
+                Text label = null;
+                for (int c = 0; c < button.transform.childCount; c++)
+                {
+                    var child = button.transform.GetChild(c);
+                    if (child.name == "Icon" || child.name == "Desc")
+                        continue;
+                    label = child.GetComponent<Text>();
+                    if (label != null)
+                        break;
+                }
+                if (label != null)
+                    label.text = "替换：" + ownedDef.Name + "  [" + ownedDef.Type + "]";
+            }
+
             replacePanel.transform.SetAsLastSibling();
             replacePanel.SetActive(true);
+            Debug.Log("[Ruilin] Replace panel on top, inventory=" + RunInventory.Items.Count);
+        }
 
+        void EnsureReplaceDim()
+        {
+            if (replacePanel == null)
+                return;
+            Transform dimTf = replacePanel.transform.Find("FullDim");
+            Image dimImg;
+            if (dimTf == null)
+            {
+                var go = new GameObject("FullDim", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                go.transform.SetParent(replacePanel.transform, false);
+                dimTf = go.transform;
+                dimImg = go.GetComponent<Image>();
+            }
+            else
+            {
+                dimImg = dimTf.GetComponent<Image>();
+                if (dimImg == null)
+                    dimImg = dimTf.gameObject.AddComponent<Image>();
+            }
+
+            var dimRt = (RectTransform)dimTf;
+            dimRt.anchorMin = Vector2.zero;
+            dimRt.anchorMax = Vector2.one;
+            dimRt.pivot = new Vector2(0.5f, 0.5f);
+            dimRt.anchoredPosition = new Vector2(0f, 400f);
+            dimRt.offsetMin = Vector2.zero;
+            dimRt.offsetMax = Vector2.zero;
+            dimRt.localScale = new Vector3(3f, 10f, 1f);
+            dimRt.SetAsFirstSibling();
+            dimImg.sprite = null;
+            dimImg.color = new Color(0f, 0f, 0f, 0.82f);
+            dimImg.raycastTarget = true;
+        }
+
+        Button[] EnsureReplaceSlotButtons()
+        {
             Transform slots = replacePanel.transform.Find("Slots");
             if (slots == null)
             {
-                // 兼容旧层级：找带多个 Button 的子节点
                 for (int i = 0; i < replacePanel.transform.childCount; i++)
                 {
                     var child = replacePanel.transform.GetChild(i);
+                    if (child.name == "FullDim")
+                        continue;
                     if (child.GetComponentsInChildren<Button>(true).Length >= 2)
                     {
                         slots = child;
@@ -277,41 +634,45 @@ namespace Ruilin
                 }
             }
 
-            if (slots == null || slots.childCount < 2 || RunInventory.Items.Count < 2)
+            if (slots == null)
             {
-                Debug.LogError("[Ruilin] 替换槽位未就绪 slots=" + (slots != null) +
-                               " items=" + RunInventory.Items.Count);
-                // 兜底：无法替换则放弃本奖励，仍可 NEXT
-                nextButton.gameObject.SetActive(true);
-                return;
+                GameObject slotsGo = MakePanel(replacePanel.transform, "Slots",
+                    Vector2.zero, Vector2.one, Color.clear);
+                slots = slotsGo.transform;
             }
 
+            // 关掉 LayoutGroup，改用与选卡相同的绝对定位大卡
+            var layout = slots.GetComponent<HorizontalLayoutGroup>();
+            if (layout != null)
+                layout.enabled = false;
+
+            var slotsRt = slots as RectTransform;
+            if (slotsRt != null)
+            {
+                slotsRt.anchorMin = Vector2.zero;
+                slotsRt.anchorMax = Vector2.one;
+                slotsRt.offsetMin = Vector2.zero;
+                slotsRt.offsetMax = Vector2.zero;
+            }
+
+            while (slots.childCount < 2)
+                MakeButton(slots, "槽位", null, Vector2.zero, Vector2.one);
+
+            var result = new Button[2];
             for (int i = 0; i < 2; i++)
             {
-                Button button = slots.GetChild(i).GetComponent<Button>();
-                if (button == null)
-                    button = slots.GetChild(i).GetComponentInChildren<Button>(true);
-                if (button == null)
-                    continue;
-
-                // 保证可见可点
-                var img = button.GetComponent<Image>();
-                if (img != null)
-                {
-                    img.raycastTarget = true;
-                    if (img.color.a < 0.5f)
-                        img.color = new Color(0.24f, 0.29f, 0.38f, 1f);
-                }
-
-                int captured = i;
-                button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => ReplaceItem(captured));
-                button.interactable = true;
-
-                Text label = button.GetComponentInChildren<Text>(true);
-                if (label != null)
-                    label.text = "替换 " + ItemCatalog.Get(RunInventory.Items[i].Id).Name;
+                var btn = slots.GetChild(i).GetComponent<Button>();
+                if (btn == null)
+                    btn = slots.GetChild(i).gameObject.AddComponent<Button>();
+                var img = slots.GetChild(i).GetComponent<Image>();
+                if (img == null)
+                    img = slots.GetChild(i).gameObject.AddComponent<Image>();
+                btn.targetGraphic = img;
+                result[i] = btn;
             }
+
+            slots.SetAsLastSibling();
+            return result;
         }
 
         void ReplaceItem(int slot)
@@ -324,9 +685,11 @@ namespace Ruilin
             RunInventory.ReplaceAt(slot, pendingReward.Id);
             if (replacePanel != null)
                 replacePanel.SetActive(false);
-            if (nextButton != null)
-                nextButton.gameObject.SetActive(true);
+            if (rewardPanel != null)
+                rewardPanel.SetActive(false);
             RefreshItemBar();
+            RunInventory.MarkRunContinuing();
+            NextLevel();
         }
 
         void NextLevel()
@@ -337,20 +700,23 @@ namespace Ruilin
             Time.timeScale = 1f;
             string current = SceneManager.GetActiveScene().name;
             int idx = System.Array.IndexOf(RunLevelOrder, current);
-            // 与 Level2→Level3 相同：链上下一关；末关（Level4）则本关重开。
             if (idx >= 0 && idx + 1 < RunLevelOrder.Length)
             {
+                // 还有下一关：带着背包继续
                 RunInventory.MarkRunContinuing();
                 SceneManager.LoadScene(RunLevelOrder[idx + 1]);
             }
             else
             {
-                rewardPanel.SetActive(false);
-                RunInventory.ResetUsesForMatch();
+                // Level5 选完 = 全通关：清空背包，回主菜单
+                RunInventory.ClearRun();
+                RunInventory.ClearContinueFlag();
+                if (rewardPanel != null)
+                    rewardPanel.SetActive(false);
                 settled = false;
                 rewardCommitted = false;
                 pendingReward = null;
-                battle.BeginMatch();
+                SceneManager.LoadScene(StartSceneName);
             }
         }
 
@@ -388,9 +754,9 @@ namespace Ruilin
 
         bool BindExistingUi()
         {
-            Transform gameOver = canvas.transform.Find("RuilinGameOver");
-            Transform reward = canvas.transform.Find("RuilinReward");
-            Transform replace = canvas.transform.Find("RuilinReplace");
+            Transform gameOver = FindOverlayPanel("RuilinGameOver");
+            Transform reward = FindOverlayPanel("RuilinReward");
+            Transform replace = FindOverlayPanel("RuilinReplace");
             if (gameOver == null || reward == null || replace == null)
                 return false;
 
@@ -409,9 +775,32 @@ namespace Ruilin
             return true;
         }
 
-        /// <summary>
-        /// 复用 BottomBar/PlayerBombPanel 作为道具栏，不再单独造 RuilinItemBar。
-        /// </summary>
+        Transform FindOverlayPanel(string name)
+        {
+            if (canvas != null)
+            {
+                Transform t = canvas.transform.Find(name);
+                if (t != null)
+                    return t;
+            }
+            if (battle != null)
+            {
+                Transform host = battle.transform.Find("RuilinOverlayHost");
+                if (host != null)
+                {
+                    Transform t = host.Find(name);
+                    if (t != null)
+                        return t;
+                }
+                Transform[] all = battle.GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < all.Length; i++)
+                    if (all[i].name == name)
+                        return all[i];
+            }
+            var go = GameObject.Find(name);
+            return go != null ? go.transform : null;
+        }
+
         void EnsurePlayerBombItemBar()
         {
             Transform panel = FindPlayerBombPanel();
@@ -422,75 +811,146 @@ namespace Ruilin
                 return;
             }
 
-            // 标题：保留原 Text，若没有就补一个
-            Text title = null;
+            // 去掉丑框：背景 Invisible，标题隐藏
+            var panelImg = panel.GetComponent<Image>();
+            if (panelImg != null)
+            {
+                panelImg.sprite = null;
+                panelImg.color = Color.clear;
+                panelImg.raycastTarget = false;
+                panelImg.enabled = false;
+            }
+
             for (int i = 0; i < panel.childCount; i++)
             {
                 var child = panel.GetChild(i);
                 if (child.name == "Slots")
                     continue;
-                title = child.GetComponent<Text>();
+                var title = child.GetComponent<Text>();
                 if (title != null)
-                    break;
+                    child.gameObject.SetActive(false);
             }
-            if (title == null)
-                title = MakeText(panel, "道具栏", 18, new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.98f));
-            else
+
+            // 脱离原窄框：左下自由区域，只放两张大卡
+            var panelRt = panel as RectTransform;
+            if (panelRt != null)
             {
-                title.text = "道具栏";
-                var titleRt = title.rectTransform;
-                titleRt.anchorMin = new Vector2(0.05f, 0.72f);
-                titleRt.anchorMax = new Vector2(0.95f, 0.98f);
-                titleRt.offsetMin = Vector2.zero;
-                titleRt.offsetMax = Vector2.zero;
+                panelRt.anchorMin = new Vector2(0f, 0f);
+                panelRt.anchorMax = new Vector2(0f, 0f);
+                panelRt.pivot = new Vector2(0f, 0f);
+                panelRt.anchoredPosition = new Vector2(18f, 18f); // 略上移，躲开桌沿/文字
+                panelRt.sizeDelta = new Vector2(480f, 320f);
+                panelRt.localScale = Vector3.one;
             }
 
             Transform slots = panel.Find("Slots");
             if (slots == null)
             {
                 GameObject slotsGo = MakePanel(panel, "Slots",
-                    new Vector2(0.04f, 0.06f), new Vector2(0.96f, 0.68f),
-                    Color.clear);
+                    Vector2.zero, Vector2.one, Color.clear);
                 slots = slotsGo.transform;
-                var layout = slotsGo.AddComponent<HorizontalLayoutGroup>();
-                layout.spacing = 6f;
-                layout.padding = new RectOffset(2, 2, 2, 2);
-                layout.childForceExpandWidth = true;
-                layout.childForceExpandHeight = true;
-                layout.childControlWidth = true;
-                layout.childControlHeight = true;
             }
 
-            while (slots.childCount < 2)
-                MakeButton(slots, "空", null, Vector2.zero, Vector2.one);
+            var slotsRt = slots as RectTransform;
+            if (slotsRt != null)
+            {
+                slotsRt.anchorMin = Vector2.zero;
+                slotsRt.anchorMax = Vector2.one;
+                slotsRt.offsetMin = Vector2.zero;
+                slotsRt.offsetMax = Vector2.zero;
+            }
 
-            // 槽位铺满 Slots
+            var slotsImg = slots.GetComponent<Image>();
+            if (slotsImg != null)
+            {
+                slotsImg.color = Color.clear;
+                slotsImg.raycastTarget = false;
+            }
+
+            // 不用 LayoutGroup，绝对定位大卡
+            var layout = slots.GetComponent<HorizontalLayoutGroup>();
+            if (layout != null)
+                layout.enabled = false;
+
+            while (slots.childCount < 2)
+                MakeButton(slots, "", null, Vector2.zero, Vector2.one);
+
+            // 再放大一档：约 190×265
+            const float cardW = 190f;
+            const float cardH = 265f;
+            const float gap = 20f;
+
             for (int i = 0; i < 2; i++)
             {
                 var slotRt = slots.GetChild(i) as RectTransform;
                 if (slotRt == null)
                     continue;
-                slotRt.anchorMin = Vector2.zero;
-                slotRt.anchorMax = Vector2.one;
-                slotRt.offsetMin = Vector2.zero;
-                slotRt.offsetMax = Vector2.zero;
-                var label = slotRt.GetComponentInChildren<Text>();
-                if (label != null)
-                    label.fontSize = 16;
+
+                var le = slotRt.GetComponent<LayoutElement>();
+                if (le != null)
+                    le.enabled = false;
+
+                slotRt.anchorMin = new Vector2(0f, 0f);
+                slotRt.anchorMax = new Vector2(0f, 0f);
+                slotRt.pivot = new Vector2(0.5f, 0.5f);
+                slotRt.sizeDelta = new Vector2(cardW, cardH);
+                slotRt.anchoredPosition = new Vector2(
+                    cardW * 0.5f + i * (cardW + gap),
+                    cardH * 0.5f + 8f); // 卡面上移约 8px
+                slotRt.localScale = Vector3.one;
+
+                var btn = slotRt.GetComponent<Button>();
+                if (btn == null)
+                    btn = slotRt.gameObject.AddComponent<Button>();
+                var img = slotRt.GetComponent<Image>();
+                if (img == null)
+                    img = slotRt.gameObject.AddComponent<Image>();
+                img.color = Color.clear;
+                img.raycastTarget = true;
+                btn.targetGraphic = img;
+                btn.transition = Selectable.Transition.None;
+
+                Text label = slotRt.GetComponentInChildren<Text>(true);
+                if (label == null)
+                    label = MakeText(slotRt, "", 14, Vector2.zero, Vector2.one);
+                label.text = "";
             }
 
+            var barCanvas = panel.GetComponent<Canvas>();
+            if (barCanvas == null)
+                barCanvas = panel.gameObject.AddComponent<Canvas>();
+            barCanvas.overrideSorting = true;
+            barCanvas.sortingOrder = 650;
+            if (panel.GetComponent<GraphicRaycaster>() == null)
+                panel.gameObject.AddComponent<GraphicRaycaster>();
+
             itemBar = slots;
+            Debug.Log("[Ruilin] ItemBar ready (frameless) slots=" + slots.childCount +
+                      " inventory=" + RunInventory.Items.Count);
         }
 
         Transform FindPlayerBombPanel()
         {
-            if (canvas == null)
-                return null;
-            Transform direct = canvas.transform.Find("BottomBar/PlayerBombPanel");
-            if (direct != null)
-                return direct;
+            Transform root = canvas != null ? canvas.transform : null;
+            if (root == null && battle != null)
+                root = battle.transform.Find("Canvas");
 
-            Transform[] all = canvas.GetComponentsInChildren<Transform>(true);
+            if (root != null)
+            {
+                Transform direct = root.Find("BottomBar/PlayerBombPanel");
+                if (direct != null)
+                    return direct;
+            }
+
+            if (battle != null)
+            {
+                Transform[] underBattle = battle.GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < underBattle.Length; i++)
+                    if (underBattle[i].name == "PlayerBombPanel")
+                        return underBattle[i];
+            }
+
+            Transform[] all = Object.FindObjectsOfType<Transform>(true);
             for (int i = 0; i < all.Length; i++)
                 if (all[i].name == "PlayerBombPanel")
                     return all[i];
@@ -544,25 +1004,31 @@ namespace Ruilin
             {
                 if (i >= itemBar.childCount)
                     break;
-                Button slotButton = itemBar.GetChild(i).GetComponent<Button>();
+                Transform slot = itemBar.GetChild(i);
+                Button slotButton = slot.GetComponent<Button>();
                 if (slotButton == null)
-                    continue;
-                Text label = slotButton.GetComponentInChildren<Text>();
+                    slotButton = slot.gameObject.AddComponent<Button>();
+                Text label = slot.GetComponentInChildren<Text>(true);
                 if (label == null)
-                    continue;
+                    label = MakeText(slot, "", 14, Vector2.zero, Vector2.one);
+
                 slotButton.onClick.RemoveAllListeners();
                 slotButton.interactable = false;
                 if (i >= RunInventory.Items.Count)
                 {
-                    label.text = "空";
+                    ClearItemVisual(slotButton);
+                    label.text = "";
+                    slot.gameObject.SetActive(false);
                     continue;
                 }
 
+                slot.gameObject.SetActive(true);
                 OwnedItem owned = RunInventory.Items[i];
                 ItemDefinition definition = ItemCatalog.Get(owned.Id);
-                label.text = definition.IsActive
+                string status = definition.IsActive
                     ? definition.Name + "\n×" + owned.RemainingUses
                     : definition.Name + "\n被动";
+                ApplyItemVisual(slotButton, definition, status, rewardCardLayout: false);
 
                 if (definition.IsActive && owned.RemainingUses > 0)
                 {
@@ -593,16 +1059,194 @@ namespace Ruilin
         void SetCard(Button card, ItemDefinition item)
         {
             card.interactable = true;
-            card.image.color = new Color(0.20f, 0.23f, 0.30f, 1f);
-            card.GetComponentInChildren<Text>().text =
-                item.Name + "\n\n[" + item.Type + "]\n\n" + item.Description;
+            ApplyRewardCardVisual(card, item);
+            SetCardSelected(card, false);
         }
 
         static void SetCardSelected(Button card, bool selected)
         {
-            card.image.color = selected
-                ? new Color(0.35f, 0.35f, 0.35f, 1f)
-                : new Color(0.14f, 0.14f, 0.14f, 1f);
+            if (card == null)
+                return;
+            card.transform.localScale = selected ? Vector3.one * 1.08f : Vector3.one;
+            if (card.image != null)
+                card.image.color = selected ? new Color(1f, 1f, 0.9f, 1f) : Color.white;
+        }
+
+        /// <summary>结算大卡：卡面 sprite；名称与描述在卡下方。</summary>
+        static void ApplyRewardCardVisual(Button button, ItemDefinition item)
+        {
+            if (button == null || item == null)
+                return;
+
+            Sprite sprite = ItemCatalog.GetIcon(item.Id);
+            Transform oldIcon = button.transform.Find("Icon");
+            if (oldIcon != null)
+                oldIcon.gameObject.SetActive(false);
+
+            if (button.image != null)
+            {
+                button.image.sprite = sprite;
+                button.image.color = Color.white;
+                button.image.type = Image.Type.Simple;
+                button.image.preserveAspect = true;
+            }
+
+            Font font = null;
+            Text title = null;
+            for (int i = 0; i < button.transform.childCount; i++)
+            {
+                var child = button.transform.GetChild(i);
+                if (child.name == "Icon" || child.name == "Desc")
+                    continue;
+                title = child.GetComponent<Text>();
+                if (title != null)
+                    break;
+            }
+
+            if (title != null)
+            {
+                font = title.font;
+                title.text = item.Name + "  [" + item.Type + "]";
+                title.fontSize = 30;
+                title.fontStyle = FontStyle.Bold;
+                title.alignment = TextAnchor.MiddleCenter;
+                title.color = Color.white;
+                title.horizontalOverflow = HorizontalWrapMode.Wrap;
+                title.verticalOverflow = VerticalWrapMode.Truncate;
+                title.raycastTarget = false;
+                var lrt = title.rectTransform;
+                lrt.anchorMin = new Vector2(0.05f, 0f);
+                lrt.anchorMax = new Vector2(0.95f, 0f);
+                lrt.pivot = new Vector2(0.5f, 1f);
+                lrt.anchoredPosition = new Vector2(0f, 150f);
+                lrt.sizeDelta = new Vector2(0f, 40f);
+            }
+
+            if (font == null)
+            {
+                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (font == null)
+                    font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+
+            Text desc = EnsureRewardDescText(button.transform, font);
+            desc.text = item.Description;
+        }
+
+        static Text EnsureRewardDescText(Transform card, Font font)
+        {
+            Transform existing = card.Find("Desc");
+            Text text;
+            if (existing != null)
+            {
+                text = existing.GetComponent<Text>();
+            }
+            else
+            {
+                var go = new GameObject("Desc", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+                go.transform.SetParent(card, false);
+                text = go.GetComponent<Text>();
+            }
+
+            var rt = text.rectTransform;
+            rt.anchorMin = new Vector2(0.04f, 0f);
+            rt.anchorMax = new Vector2(0.96f, 0f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, 106f);
+            rt.sizeDelta = new Vector2(0f, 150f);
+
+            text.font = font;
+            text.fontSize = 26;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.UpperCenter;
+            text.color = Color.white;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.transform.SetAsLastSibling();
+            return text;
+        }
+
+        static void ApplyItemVisual(Button button, ItemDefinition item, string labelText, bool rewardCardLayout)
+        {
+            if (button == null || item == null)
+                return;
+
+            if (rewardCardLayout)
+            {
+                ApplyRewardCardVisual(button, item);
+                return;
+            }
+
+            Image icon = EnsureIconImage(button.transform);
+            Sprite sprite = ItemCatalog.GetIcon(item.Id);
+            // 道具栏：整张按钮就是卡面，不再套深色底框
+            if (icon != null)
+                icon.gameObject.SetActive(false);
+
+            if (button.image != null)
+            {
+                button.image.sprite = sprite;
+                button.image.enabled = sprite != null;
+                button.image.color = Color.white;
+                button.image.type = Image.Type.Simple;
+                button.image.preserveAspect = true;
+                button.image.raycastTarget = true;
+            }
+
+            Text label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.text = labelText ?? "";
+                var lrt = label.rectTransform;
+                // 文字挂在卡面下方，避免与图重叠
+                lrt.anchorMin = new Vector2(0f, 0f);
+                lrt.anchorMax = new Vector2(1f, 0f);
+                lrt.pivot = new Vector2(0.5f, 1f);
+                lrt.anchoredPosition = new Vector2(0f, -6f);
+                lrt.sizeDelta = new Vector2(0f, 42f);
+                label.fontSize = 18;
+                label.fontStyle = FontStyle.Bold;
+                label.alignment = TextAnchor.UpperCenter;
+                label.color = Color.white;
+                label.horizontalOverflow = HorizontalWrapMode.Wrap;
+                label.verticalOverflow = VerticalWrapMode.Truncate;
+                label.raycastTarget = false;
+            }
+        }
+
+        static void ClearItemVisual(Button button)
+        {
+            Image icon = button != null ? button.transform.Find("Icon")?.GetComponent<Image>() : null;
+            if (icon != null)
+            {
+                icon.sprite = null;
+                icon.enabled = false;
+            }
+            if (button != null && button.image != null)
+            {
+                button.image.sprite = null;
+                button.image.color = Color.clear;
+            }
+            Text label = button != null ? button.GetComponentInChildren<Text>(true) : null;
+            if (label != null)
+                label.text = "";
+        }
+
+        static Image EnsureIconImage(Transform button)
+        {
+            Transform existing = button.Find("Icon");
+            if (existing != null)
+                return existing.GetComponent<Image>();
+
+            var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(button, false);
+            go.transform.SetAsFirstSibling();
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+            img.type = Image.Type.Simple;
+            img.preserveAspect = true;
+            return img;
         }
 
         GameObject MakeOverlay(string name, Color color)

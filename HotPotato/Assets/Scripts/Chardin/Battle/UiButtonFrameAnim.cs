@@ -15,7 +15,7 @@ namespace Chardin
     {
         [SerializeField] Image target;
         [SerializeField] Sprite[] frames = new Sprite[4]; // 0=01 .. 3=04
-        [SerializeField] float clickFps = 6f;
+        [SerializeField] float clickFps = 10f;
         [SerializeField] AnimationClip clickClip;
 
         Button _button;

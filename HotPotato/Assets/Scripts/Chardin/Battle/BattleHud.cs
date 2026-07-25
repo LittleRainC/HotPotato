@@ -82,6 +82,7 @@ namespace Chardin
             EnsureFullscreenDamageFlash(canvas);
             WireButtons();
             EnsureActionButtonHovers();
+            EnsureActionButtonsOnTop();
             SetDecisionTimerVisible(false);
         }
 
@@ -335,6 +336,29 @@ namespace Chardin
             SetupButtonFrames(btnShove, "shove");
         }
 
+        /// <summary>ActionButtons 高于 TutorialDialogue（sorting 500），避免对话挡住技能键。</summary>
+        void EnsureActionButtonsOnTop()
+        {
+            Transform actions = null;
+            if (btnDefuse != null)
+                actions = btnDefuse.transform.parent;
+            else if (btnPass != null)
+                actions = btnPass.transform.parent;
+            else if (btnShove != null)
+                actions = btnShove.transform.parent;
+            if (actions == null)
+                return;
+
+            var canvas = actions.GetComponent<Canvas>();
+            if (canvas == null)
+                canvas = actions.gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = 600;
+
+            if (actions.GetComponent<GraphicRaycaster>() == null)
+                actions.gameObject.AddComponent<GraphicRaycaster>();
+        }
+
         void SetupButtonFrames(Button button, string prefix)
         {
             if (button == null)
@@ -380,7 +404,7 @@ namespace Chardin
             string cn;
             if (prefix == "defuse") cn = "捏0" + frame;
             else if (prefix == "pass") cn = "传0" + frame;
-            else cn = "塞0" + frame;
+            else cn = frame == 4 ? "塞04 gif" : "塞0" + frame;
 
             return LoadUiSprite(resName, "Assets/Art/美术素材/Button/" + cn + ".png");
         }

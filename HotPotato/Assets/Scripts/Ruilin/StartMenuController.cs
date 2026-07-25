@@ -200,6 +200,8 @@ namespace Ruilin
 
         public void OnStartClicked()
         {
+            RunInventory.ClearContinueFlag();
+            RunInventory.ClearRun();
             SceneManager.LoadScene(firstLevelSceneName);
         }
 
