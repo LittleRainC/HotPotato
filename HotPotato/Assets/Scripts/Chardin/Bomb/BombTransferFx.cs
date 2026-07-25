@@ -156,14 +156,16 @@ namespace Chardin
 
             var go = new GameObject("BombDeltaPopup");
             go.transform.SetParent(bomb, false);
-            go.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+            go.transform.localPosition = bombView != null
+                ? bombView.DeltaPopupLocalOffset
+                : new Vector3(0.3f, -2.5f, 0f);
 
             var mesh = go.AddComponent<TextMesh>();
             mesh.text = text;
             mesh.anchor = TextAnchor.MiddleCenter;
             mesh.alignment = TextAlignment.Center;
-            mesh.characterSize = 0.14f;
-            mesh.fontSize = 72;
+            mesh.characterSize = bombView != null ? bombView.CountdownLabelCharacterSize : 0.12f;
+            mesh.fontSize = bombView != null ? bombView.CountdownLabelFontSize : 40;
             mesh.color = color;
 
             var mr = go.GetComponent<MeshRenderer>();

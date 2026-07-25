@@ -25,13 +25,25 @@ namespace Chardin
         [Header("Decision Timer")]
         [SerializeField] GameObject decisionTimerRoot;
         [SerializeField] Image decisionTimerFill;
+        [SerializeField] RectTransform decisionTimerFillRect;
         [SerializeField] Text decisionTimerText;
-        [SerializeField] Color timerNormal = new Color(0.35f, 0.75f, 0.45f, 1f);
-        [SerializeField] Color timerUrgent = new Color(0.9f, 0.2f, 0.2f, 1f);
+        [SerializeField] Color timerNormal = Color.white;
+        [SerializeField] Color timerWarn = new Color(1f, 0.28f, 0.22f, 1f);
+        const float TimerFlashRemainingSeconds = 5f; // 剩余≤5秒开始红闪（写死，避免场景旧序列化成3）
+        [SerializeField] float timerFlashCycle = 0.28f; // 一整轮：红 + 白
+        [SerializeField, Range(0.5f, 0.95f)] float timerFlashRedDuty = 0.72f; // 红占比（白更短）
+        [SerializeField] float timerFillHalfSpan = 0.43f; // t=1 时左右各占比例（相对父宽）
+        [SerializeField] float timerFillYMin = 0.22f;
+        [SerializeField] float timerFillYMax = 0.78f;
+
+        [Header("UI Art (美术素材/Button)")]
+        [SerializeField] Sprite timerBarBg;
+        [SerializeField] Sprite timerBarFill;
+        [SerializeField] Sprite defuseBadgeSprite;
 
         [Header("Damage Flash")]
         [SerializeField] Image fullscreenDamageFlash;
-        [SerializeField] float fullscreenFlashSeconds = 0.55f;
+        [SerializeField] float fullscreenFlashSeconds = 0.65f; // 与 Enemy.deathFlashSeconds 一致
         [SerializeField] float fullscreenFlashHz = 14f;
 
         readonly List<Image> _heartIcons = new List<Image>();
@@ -62,12 +74,74 @@ namespace Chardin
             }
 
             _canvas = canvas;
+            EnsureUiArtSprites();
             EnsureHeartSprites();
             SetupHearts(canvas);
             SetupDecisionTimer(canvas);
+            ApplyDefuseBadgeArt();
             EnsureFullscreenDamageFlash(canvas);
             WireButtons();
             SetDecisionTimerVisible(false);
+        }
+
+        void EnsureUiArtSprites()
+        {
+            if (timerBarBg == null)
+                timerBarBg = LoadUiSprite("ui_timerbar_bg_01", "Assets/Art/美术素材/Button/ui_timerbar_bg_01.png");
+            if (timerBarFill == null)
+                timerBarFill = LoadUiSprite("ui_timerbar_fill_01", "Assets/Art/美术素材/Button/ui_timerbar_fill_01.png");
+            if (defuseBadgeSprite == null)
+                defuseBadgeSprite = LoadUiSprite("ui_badge_count_01", "Assets/Art/美术素材/Button/ui_badge_count_01.png");
+        }
+
+        static Sprite LoadUiSprite(string resourcesName, string editorAssetPath)
+        {
+            var fromResources = Resources.Load<Sprite>("UI/" + resourcesName);
+            if (fromResources != null)
+                return fromResources;
+
+#if UNITY_EDITOR
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(editorAssetPath);
+#else
+            return null;
+#endif
+        }
+
+        /// <summary>与 Level5 拆按钮 Badge 一致：圆形素材 + scale/位置。</summary>
+        void ApplyDefuseBadgeArt()
+        {
+            if (btnDefuse == null)
+                return;
+
+            var badge = btnDefuse.transform.Find("Badge") as RectTransform;
+            if (badge == null)
+                return;
+
+            badge.anchorMin = new Vector2(0.5f, 0.5f);
+            badge.anchorMax = new Vector2(0.5f, 0.5f);
+            badge.pivot = new Vector2(0.5f, 0.5f);
+            badge.anchoredPosition = new Vector2(8f, 10f);
+            badge.sizeDelta = new Vector2(70f, 70f);
+            badge.localScale = new Vector3(0.15f, 0.15f, 0.15f);
+
+            var img = badge.GetComponent<Image>();
+            if (img != null)
+            {
+                if (defuseBadgeSprite != null)
+                    img.sprite = defuseBadgeSprite;
+                img.color = Color.white;
+                img.type = Image.Type.Simple;
+                img.preserveAspect = true;
+            }
+
+            if (defuseBadgeText == null)
+                defuseBadgeText = badge.GetComponentInChildren<Text>(true);
+            if (defuseBadgeText != null)
+            {
+                defuseBadgeText.fontSize = 28;
+                defuseBadgeText.alignment = TextAnchor.MiddleCenter;
+                defuseBadgeText.color = Color.white;
+            }
         }
 
         void EnsureFullscreenDamageFlash(Transform canvas)
@@ -188,22 +262,35 @@ namespace Chardin
 
         void SetupDecisionTimer(Transform canvas)
         {
+            EnsureUiArtSprites();
+
             var existing = canvas.Find("DecisionTimer");
             if (existing != null)
                 Destroy(existing.gameObject);
 
+            // 背景：略变窄、略变高（相对原先 0.25–0.75 / 0.84–0.89）
             decisionTimerRoot = CreateUiPanel("DecisionTimer", canvas,
-                new Vector2(0.25f, 0.84f), new Vector2(0.75f, 0.89f),
-                new Color(0.08f, 0.08f, 0.1f, 0.85f));
+                new Vector2(0.32f, 0.825f), new Vector2(0.68f, 0.905f),
+                Color.white);
+            var bg = decisionTimerRoot.GetComponent<Image>();
+            if (timerBarBg != null)
+                bg.sprite = timerBarBg;
+            bg.type = Image.Type.Simple;
+            bg.preserveAspect = false;
+            bg.color = Color.white;
 
+            // 填充：居中，随剩余时间向中间缩短（不用左对齐 Filled）
             var fillGo = CreateUiPanel("Fill", decisionTimerRoot.transform,
-                new Vector2(0.02f, 0.18f), new Vector2(0.98f, 0.82f),
-                timerNormal);
+                new Vector2(0.5f - timerFillHalfSpan, timerFillYMin),
+                new Vector2(0.5f + timerFillHalfSpan, timerFillYMax),
+                Color.white);
+            decisionTimerFillRect = fillGo.GetComponent<RectTransform>();
             decisionTimerFill = fillGo.GetComponent<Image>();
-            decisionTimerFill.type = Image.Type.Filled;
-            decisionTimerFill.fillMethod = Image.FillMethod.Horizontal;
-            decisionTimerFill.fillOrigin = (int)Image.OriginHorizontal.Left;
-            decisionTimerFill.fillAmount = 1f;
+            if (timerBarFill != null)
+                decisionTimerFill.sprite = timerBarFill;
+            decisionTimerFill.type = Image.Type.Simple;
+            decisionTimerFill.color = timerNormal;
+            decisionTimerFill.preserveAspect = false;
 
             var labelGo = new GameObject("TimerText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             labelGo.transform.SetParent(decisionTimerRoot.transform, false);
@@ -351,18 +438,37 @@ namespace Chardin
             remaining = Mathf.Max(0f, remaining);
             total = Mathf.Max(0.01f, total);
             float t = Mathf.Clamp01(remaining / total);
-            bool urgent = remaining <= 3f;
+
+            if (decisionTimerFillRect != null)
+            {
+                // 剩余时间越少，左右锚点越靠近 0.5 → 向中间缩短
+                float half = timerFillHalfSpan * t;
+                decisionTimerFillRect.anchorMin = new Vector2(0.5f - half, timerFillYMin);
+                decisionTimerFillRect.anchorMax = new Vector2(0.5f + half, timerFillYMax);
+                decisionTimerFillRect.offsetMin = Vector2.zero;
+                decisionTimerFillRect.offsetMax = Vector2.zero;
+            }
 
             if (decisionTimerFill != null)
             {
-                decisionTimerFill.fillAmount = t;
-                decisionTimerFill.color = urgent ? timerUrgent : timerNormal;
+                if (remaining <= TimerFlashRemainingSeconds)
+                {
+                    // 剩余≤5秒：持续红闪（红长白短）
+                    float cycle = Mathf.Max(0.05f, timerFlashCycle);
+                    float phase = Mathf.Repeat(Time.unscaledTime, cycle) / cycle;
+                    bool showRed = phase < timerFlashRedDuty;
+                    decisionTimerFill.color = showRed ? timerWarn : Color.white;
+                }
+                else
+                {
+                    decisionTimerFill.color = Color.white;
+                }
             }
 
             if (decisionTimerText != null)
             {
                 decisionTimerText.text = remaining.ToString("0.0");
-                decisionTimerText.color = urgent ? timerUrgent : Color.white;
+                decisionTimerText.color = Color.white;
             }
         }
 

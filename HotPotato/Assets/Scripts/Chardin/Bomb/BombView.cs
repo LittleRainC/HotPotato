@@ -29,7 +29,15 @@ namespace Chardin
 
         [Header("Countdown Label")]
         [SerializeField] TextMesh countdownLabel;
-        [SerializeField] Vector3 labelLocalOffset = new Vector3(0f, 0.55f, 0f);
+        [SerializeField] Vector3 labelLocalOffset = new Vector3(-0.15f, -2.5f, 0f);
+        [SerializeField] int labelFontSize = 40;
+        [SerializeField] float labelCharacterSize = 0.12f;
+        [SerializeField] float deltaPopupRightOffset = 0.45f; // +2/-1 飘字在倒计时右侧
+
+        public Vector3 CountdownLabelLocalOffset => labelLocalOffset;
+        public Vector3 DeltaPopupLocalOffset => labelLocalOffset + new Vector3(deltaPopupRightOffset, 0f, 0f);
+        public int CountdownLabelFontSize => labelFontSize;
+        public float CountdownLabelCharacterSize => labelCharacterSize;
 
         [Header("Shake")]
         [SerializeField] float warningShake = 0.02f;
@@ -102,19 +110,28 @@ namespace Chardin
 
         void EnsureLabel()
         {
-            if (countdownLabel != null)
-                return;
+            if (countdownLabel == null)
+            {
+                var existing = transform.Find("CountdownLabel");
+                if (existing != null)
+                    countdownLabel = existing.GetComponent<TextMesh>();
+            }
 
-            var go = new GameObject("CountdownLabel");
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = labelLocalOffset;
-            countdownLabel = go.AddComponent<TextMesh>();
-            countdownLabel.anchor = TextAnchor.MiddleCenter;
-            countdownLabel.alignment = TextAlignment.Center;
-            countdownLabel.characterSize = 0.12f;
-            countdownLabel.fontSize = 64;
-            countdownLabel.color = Color.white;
-            var mr = go.GetComponent<MeshRenderer>();
+            if (countdownLabel == null)
+            {
+                var go = new GameObject("CountdownLabel");
+                go.transform.SetParent(transform, false);
+                countdownLabel = go.AddComponent<TextMesh>();
+                countdownLabel.anchor = TextAnchor.MiddleCenter;
+                countdownLabel.alignment = TextAlignment.Center;
+                countdownLabel.color = Color.white;
+            }
+
+            countdownLabel.transform.localPosition = labelLocalOffset;
+            countdownLabel.characterSize = labelCharacterSize;
+            countdownLabel.fontSize = labelFontSize;
+
+            var mr = countdownLabel.GetComponent<MeshRenderer>();
             if (mr != null)
                 mr.sortingOrder = (headRenderer != null ? headRenderer.sortingOrder : 0) + faceSortingOffset + 1;
         }
