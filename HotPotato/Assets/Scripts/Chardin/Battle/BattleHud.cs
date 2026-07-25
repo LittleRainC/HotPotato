@@ -196,10 +196,8 @@ namespace Chardin
 
         void EnsureHeartSprites()
         {
-            if (heartFilled == null)
-                heartFilled = Resources.Load<Sprite>("Whitebox/heart");
-            if (heartEmpty == null)
-                heartEmpty = Resources.Load<Sprite>("Whitebox/heart_empty");
+            heartFilled = LoadUiSprite("hp1", "Assets/Art/美术素材/UI/hp1.png");
+            heartEmpty = LoadUiSprite("hp0", "Assets/Art/美术素材/UI/hp0.png");
 
             if (heartFilled == null)
                 heartFilled = MakeSolidSprite(new Color(0.86f, 0.22f, 0.28f, 1f));
@@ -240,8 +238,8 @@ namespace Chardin
             if (layout == null)
                 layout = heartsRoot.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.spacing = 12f;
-            layout.padding = new RectOffset(8, 8, 4, 4);
+            layout.spacing = -12f;
+            layout.padding = new RectOffset(0, 0, 0, 0);
             layout.childControlWidth = false;
             layout.childControlHeight = false;
             layout.childForceExpandWidth = false;
@@ -252,7 +250,7 @@ namespace Chardin
                 var go = new GameObject($"HeartIcon_{i}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
                 go.transform.SetParent(heartsRoot, false);
                 var rt = go.GetComponent<RectTransform>();
-                rt.sizeDelta = new Vector2(56f, 56f);
+                rt.sizeDelta = new Vector2(150f, 150f);
                 var img = go.GetComponent<Image>();
                 img.sprite = heartFilled;
                 img.preserveAspect = true;
