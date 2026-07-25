@@ -1,0 +1,13 @@
+﻿id,order,group,speaker,text,advance,event,next_id,enabled
+tut_l1_0,10,teach,Bomb,Hey there.,click_bubble,,tut_l1_1,1
+tut_l1_1,20,teach,Bomb,I know the situation is confusing…,click_bubble,,tut_l1_2a,1
+tut_l1_2a,30,teach,Bomb,But right now you're gonna do exactly what I tell you to do.,click_bubble,,tut_l1_2b,1
+tut_l1_2b,40,teach,Bomb,I'll explode when the timer on me runs out.,click_bubble,Highlight the number,tut_l1_3a,1
+tut_l1_3a,50,teach,Bomb,Pass me to this weirdo next to you and the time will decrease 1s.,click_pass,Highlight the pass,tut_l1_3b,1
+tut_l1_3b,60,teach,Bomb,Try not to get yourself killed.,click_bubble,The bomb returns,tut_l1_3c,1
+tut_l1_3c,70,teach,Bomb,"You can stuff someone with meto get a -s2 on the timer, but there is chance of slipping off.",Click_stuff,Highlight the pass and return anfterwards,tut_l1_4a,1
+tut_l1_4a,80,teach,Bomb,If you snuff the spark… the timer will increase 2s. But be aware of the limitation,click_snuff,HighlightSnuff,tut_l1_4b,1
+tut_l1_4b,90,teach,Bomb,The rule is simple… let me explode in someone elses's hands instead of yours…,click_bubble,Highlight HP,tut_l1_4c,1
+tut_l1_4c,100,teach,Bomb,"Oh, I almost forget.",click_bubble,,tut_l1_4d,1
+tut_l1_4d,110,teach,Bomb,These people all have their own ways of acting… try to take advantage of that.,click_bubble,,tut_l1_5a,1
+tut_l1_5a,120,teach,Bomb,Alright then… good luck.,click_bubble,Enter L1 officially,tut_l1_5b,1

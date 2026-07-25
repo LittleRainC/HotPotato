@@ -158,7 +158,7 @@ namespace Chardin
             go.transform.SetParent(bomb, false);
             go.transform.localPosition = bombView != null
                 ? bombView.DeltaPopupLocalOffset
-                : new Vector3(0.3f, -2.5f, 0f);
+                : new Vector3(0.3f, -1.25f, 0f);
 
             var mesh = go.AddComponent<TextMesh>();
             mesh.text = text;

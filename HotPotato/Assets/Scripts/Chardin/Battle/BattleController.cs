@@ -63,6 +63,12 @@ namespace Chardin
         public IReadOnlyList<TableSeat> ClockwiseOrder => clockwiseOrder;
         public Bomb CurrentBomb => bomb;
 
+        /// <summary>Tutorial：强制玩家开局持弹。</summary>
+        public bool ForcePlayerFirstHolder { get; set; }
+
+        /// <summary>玩家行动真正开始结算时抛出（含塞确认后）。</summary>
+        public event Action<BombAction> PlayerActionResolved;
+
         void Awake()
         {
             if (bomb == null)
@@ -207,7 +213,15 @@ namespace Chardin
 
             int alive = CountAlive();
             int initial = RollInitialCountdown(alive);
-            _holderIndex = PickRandomAliveIndex();
+            if (ForcePlayerFirstHolder)
+            {
+                int playerIdx = FindPlayerSeatIndex();
+                _holderIndex = playerIdx >= 0 ? playerIdx : PickRandomAliveIndex();
+            }
+            else
+            {
+                _holderIndex = PickRandomAliveIndex();
+            }
 
             bomb.Arm(initial, viewerIsHolder: IsPlayerHolder());
             MoveBombToHolder();
@@ -358,6 +372,10 @@ namespace Chardin
 
             if (actorIndex < 0 || actorIndex >= clockwiseOrder.Count)
                 yield break;
+
+            if (clockwiseOrder[actorIndex] != null && clockwiseOrder[actorIndex].IsPlayer)
+                PlayerActionResolved?.Invoke(action);
+
             if (!clockwiseOrder[actorIndex].IsAlive || actorIndex != _holderIndex)
             {
                 _busy = false;
@@ -683,6 +701,25 @@ namespace Chardin
                     ids.Add(i);
             if (ids.Count == 0) return 0;
             return ids[UnityEngine.Random.Range(0, ids.Count)];
+        }
+
+        int FindPlayerSeatIndex()
+        {
+            for (int i = 0; i < clockwiseOrder.Count; i++)
+            {
+                if (clockwiseOrder[i] != null && clockwiseOrder[i].IsPlayer)
+                    return i;
+            }
+            return -1;
+        }
+
+        /// <summary>Tutorial：把玩家决策倒计时拉满，避免引导时超时。</summary>
+        public void SoftExtendPlayerDeadline()
+        {
+            if (_phase != Phase.AwaitingPlayerAction && _phase != Phase.AimingShove)
+                return;
+            _decisionDeadline = Time.time + decisionSeconds;
+            hud.SetDecisionTimer(decisionSeconds, decisionSeconds);
         }
 
         int FindIndexById(int id)

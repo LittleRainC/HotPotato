@@ -29,7 +29,7 @@ namespace Chardin
 
         [Header("Countdown Label")]
         [SerializeField] TextMesh countdownLabel;
-        [SerializeField] Vector3 labelLocalOffset = new Vector3(-0.15f, -2.5f, 0f);
+        [SerializeField] Vector3 labelLocalOffset = new Vector3(-0.15f, -1.25f, 0f);
         [SerializeField] int labelFontSize = 40;
         [SerializeField] float labelCharacterSize = 0.12f;
         [SerializeField] float deltaPopupRightOffset = 0.45f; // +2/-1 飘字在倒计时右侧

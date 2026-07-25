@@ -8,13 +8,18 @@ namespace Ruilin
 {
     /// <summary>
     /// 关卡结算UI。无需改场景；进入 RunLevelOrder 中的关卡时自动挂到 BattleController。
-    /// NEXT：Level2 → Level3 → Level4 → Level5（同链，末关再开一局）。
+    /// NEXT：tutorial → Level1 → Level2 → Level3 → Level4 → Level5（Tutorial 通关跳过选道具）。
     /// </summary>
     [ExecuteAlways]
     public sealed class RuilinLevel2Settlement : MonoBehaviour
     {
         /// <summary>与 Build Settings 中启用的关卡顺序一致：赢关后按此链加载下一关。</summary>
-        static readonly string[] RunLevelOrder = { "Level2", "Level3", "Level4", "Level5" };
+        static readonly string[] RunLevelOrder =
+        {
+            "tutorial", "Level1", "Level2", "Level3", "Level4", "Level5"
+        };
+
+        const string TutorialSceneName = "tutorial";
 
         BattleController battle;
         Canvas canvas;
@@ -86,8 +91,11 @@ namespace Ruilin
             EnsurePlayerBombItemBar();
             HideLegacyItemBar();
 
-            // 直接进 Level2–5（或新开 Play）会带上 PlayerPrefs 旧背包；仅续关/重开时保留。
-            if (!RunInventory.ConsumeRunContinuing())
+            // 直接进关卡（或新开 Play）会带上 PlayerPrefs 旧背包；仅续关/重开时保留。
+            // Tutorial 开局始终清空，避免旧进度干扰教学。
+            if (SceneManager.GetActiveScene().name == TutorialSceneName)
+                RunInventory.ClearRun();
+            else if (!RunInventory.ConsumeRunContinuing())
                 RunInventory.ClearRun();
 
             RunInventory.ResetUsesForMatch();
@@ -153,9 +161,21 @@ namespace Ruilin
             }
 
             if (playerAlive && !enemyAlive)
-                ShowRewards();
+            {
+                if (SceneManager.GetActiveScene().name == TutorialSceneName)
+                    FinishTutorialToLevel1();
+                else
+                    ShowRewards();
+            }
             else
                 ShowGameOver();
+        }
+
+        void FinishTutorialToLevel1()
+        {
+            Time.timeScale = 1f;
+            // Tutorial 不发道具，直接进入 Level1
+            SceneManager.LoadScene("Level1");
         }
 
         void ShowGameOver()

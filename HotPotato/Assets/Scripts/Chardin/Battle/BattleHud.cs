@@ -439,11 +439,48 @@ namespace Chardin
                 defuseBadgeText.text = "×" + charges;
         }
 
+        bool _tutorialGateActive;
+        BombAction? _tutorialOnlyAction;
+        bool _tutorialDefuseAvailable;
+
         public void SetActionsInteractable(bool interactable, bool defuseAvailable)
         {
+            if (_tutorialGateActive)
+            {
+                ApplyTutorialGate();
+                return;
+            }
+
             if (btnPass != null) btnPass.interactable = interactable;
             if (btnShove != null) btnShove.interactable = interactable;
             if (btnDefuse != null) btnDefuse.interactable = interactable && defuseAvailable;
+        }
+
+        /// <summary>
+        /// Tutorial 门控：onlyAction=null 表示全部锁定；否则只开对应技能。
+        /// </summary>
+        public void SetTutorialGate(BombAction? onlyAction, bool defuseAvailable)
+        {
+            _tutorialGateActive = true;
+            _tutorialOnlyAction = onlyAction;
+            _tutorialDefuseAvailable = defuseAvailable;
+            ApplyTutorialGate();
+        }
+
+        public void ClearTutorialGate()
+        {
+            _tutorialGateActive = false;
+            _tutorialOnlyAction = null;
+        }
+
+        void ApplyTutorialGate()
+        {
+            bool pass = _tutorialOnlyAction == BombAction.Pass;
+            bool shove = _tutorialOnlyAction == BombAction.Shove;
+            bool defuse = _tutorialOnlyAction == BombAction.Defuse && _tutorialDefuseAvailable;
+            if (btnPass != null) btnPass.interactable = pass;
+            if (btnShove != null) btnShove.interactable = shove;
+            if (btnDefuse != null) btnDefuse.interactable = defuse;
         }
 
         public void SetDecisionTimerVisible(bool visible)
