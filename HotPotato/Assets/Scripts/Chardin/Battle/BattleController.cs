@@ -470,12 +470,13 @@ namespace Chardin
         IEnumerator HandleExplosion(int victimIndex)
         {
             var victim = clockwiseOrder[victimIndex];
-            hud.SetBroadcast($"{victim.DisplayName} 挨炸！");
             Debug.Log($"[Battle] EXPLODE {victim.DisplayName}");
-            yield return new WaitForSeconds(0.6f);
 
             if (victim.IsPlayer)
             {
+                hud.SetBroadcast("你挨炸了！");
+                yield return hud.PlayFullscreenDamageFlash();
+
                 _hearts--;
                 hud.SetHearts(_hearts);
                 if (_hearts <= 0)
@@ -489,11 +490,17 @@ namespace Chardin
                 }
 
                 hud.SetBroadcast("你挨炸了 · 本场重打");
-                yield return new WaitForSeconds(0.8f);
+                yield return new WaitForSeconds(0.45f);
                 _busy = false;
                 StartFightRound(reviveAll: true);
                 yield break;
             }
+
+            hud.SetBroadcast($"{victim.DisplayName} 出局");
+            if (victim is Enemy enemy)
+                yield return enemy.PlayDeathFlash();
+            else
+                yield return new WaitForSeconds(0.45f);
 
             victim.SetAlive(false);
 

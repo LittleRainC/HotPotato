@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,8 +29,14 @@ namespace Chardin
         [SerializeField] Color timerNormal = new Color(0.35f, 0.75f, 0.45f, 1f);
         [SerializeField] Color timerUrgent = new Color(0.9f, 0.2f, 0.2f, 1f);
 
+        [Header("Damage Flash")]
+        [SerializeField] Image fullscreenDamageFlash;
+        [SerializeField] float fullscreenFlashSeconds = 0.55f;
+        [SerializeField] float fullscreenFlashHz = 14f;
+
         readonly List<Image> _heartIcons = new List<Image>();
         static Sprite _whiteSprite;
+        Transform _canvas;
 
         public event Action<BombAction> ActionClicked;
 
@@ -54,11 +61,62 @@ namespace Chardin
                 defuseBadgeText = FindText(actions, "BtnDefuse/Badge/Text");
             }
 
+            _canvas = canvas;
             EnsureHeartSprites();
             SetupHearts(canvas);
             SetupDecisionTimer(canvas);
+            EnsureFullscreenDamageFlash(canvas);
             WireButtons();
             SetDecisionTimerVisible(false);
+        }
+
+        void EnsureFullscreenDamageFlash(Transform canvas)
+        {
+            if (fullscreenDamageFlash != null)
+                return;
+
+            var existing = canvas.Find("DamageFlash");
+            if (existing != null)
+            {
+                fullscreenDamageFlash = existing.GetComponent<Image>();
+                if (fullscreenDamageFlash != null)
+                {
+                    fullscreenDamageFlash.gameObject.SetActive(false);
+                    return;
+                }
+            }
+
+            var go = CreateUiPanel("DamageFlash", canvas,
+                Vector2.zero, Vector2.one, new Color(1f, 0f, 0f, 0.55f));
+            go.transform.SetAsLastSibling();
+            fullscreenDamageFlash = go.GetComponent<Image>();
+            fullscreenDamageFlash.raycastTarget = false;
+            go.SetActive(false);
+        }
+
+        /// <summary>玩家挨炸：全屏红白闪烁。</summary>
+        public IEnumerator PlayFullscreenDamageFlash()
+        {
+            if (_canvas != null)
+                EnsureFullscreenDamageFlash(_canvas);
+            if (fullscreenDamageFlash == null)
+                yield break;
+
+            fullscreenDamageFlash.gameObject.SetActive(true);
+            fullscreenDamageFlash.transform.SetAsLastSibling();
+
+            float t = 0f;
+            while (t < fullscreenFlashSeconds)
+            {
+                t += Time.deltaTime;
+                bool useRed = Mathf.FloorToInt(t * fullscreenFlashHz) % 2 == 0;
+                fullscreenDamageFlash.color = useRed
+                    ? new Color(1f, 0.05f, 0.05f, 0.62f)
+                    : new Color(1f, 1f, 1f, 0.48f);
+                yield return null;
+            }
+
+            fullscreenDamageFlash.gameObject.SetActive(false);
         }
 
         void EnsureHeartSprites()
