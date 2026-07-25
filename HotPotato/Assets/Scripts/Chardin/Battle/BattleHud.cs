@@ -330,24 +330,59 @@ namespace Chardin
 
         void EnsureActionButtonHovers()
         {
-            SetupButtonHover(btnDefuse, "skill1", "skill11");
-            SetupButtonHover(btnPass, "skill2", "skill22");
-            SetupButtonHover(btnShove, "skill3", "skill33");
+            SetupButtonFrames(btnDefuse, "defuse");
+            SetupButtonFrames(btnPass, "pass");
+            SetupButtonFrames(btnShove, "shove");
         }
 
-        void SetupButtonHover(Button button, string normalName, string hoverName)
+        void SetupButtonFrames(Button button, string prefix)
         {
             if (button == null)
                 return;
 
-            var hover = button.GetComponent<UiButtonHoverSprite>();
-            if (hover == null)
-                hover = button.gameObject.AddComponent<UiButtonHoverSprite>();
+            var anim = button.GetComponent<UiButtonFrameAnim>();
+            if (anim == null)
+                anim = button.gameObject.AddComponent<UiButtonFrameAnim>();
 
-            const string folder = "Assets/Art/美术素材/Button/";
-            Sprite normal = LoadUiSprite(normalName, folder + normalName + ".png");
-            Sprite hoverSp = LoadUiSprite(hoverName, folder + hoverName + ".png");
-            hover.Configure(normal, hoverSp);
+            Sprite f1 = LoadButtonFrame(prefix, 1);
+            Sprite f2 = LoadButtonFrame(prefix, 2);
+            Sprite f3 = LoadButtonFrame(prefix, 3);
+            Sprite f4 = LoadButtonFrame(prefix, 4);
+            var clip = Resources.Load<AnimationClip>("UI/Buttons/btn_" + prefix + "_click");
+#if UNITY_EDITOR
+            if (clip == null)
+                clip = UnityEditor.AssetDatabase.LoadAssetAtPath<AnimationClip>(
+                    "Assets/Art/Animations/Buttons/btn_" + prefix + "_click.anim");
+#endif
+            anim.Configure(f1, f2, f3, f4, clip);
+
+            // 默认显示 04，并同步 Art / 根节点
+            if (f4 != null)
+            {
+                var art = button.transform.Find("Art");
+                var artImg = art != null ? art.GetComponent<Image>() : null;
+                if (artImg != null) artImg.sprite = f4;
+                var rootImg = button.GetComponent<Image>();
+                if (rootImg != null) rootImg.sprite = f4;
+                var pivot = button.GetComponent<UiHonorSpritePivot>();
+                if (pivot != null) pivot.Align();
+            }
+        }
+
+        static Sprite LoadButtonFrame(string prefix, int frame)
+        {
+            string resName = "btn_" + prefix + "_0" + frame;
+            var fromRes = Resources.Load<Sprite>("UI/Buttons/" + resName);
+            if (fromRes != null)
+                return fromRes;
+
+            // fallback：原中文文件名
+            string cn;
+            if (prefix == "defuse") cn = "捏0" + frame;
+            else if (prefix == "pass") cn = "传0" + frame;
+            else cn = "塞0" + frame;
+
+            return LoadUiSprite(resName, "Assets/Art/美术素材/Button/" + cn + ".png");
         }
 
         public void SetOpponentName(string name)
