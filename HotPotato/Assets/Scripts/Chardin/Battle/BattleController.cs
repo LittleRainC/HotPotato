@@ -343,7 +343,7 @@ namespace Chardin
             _pendingPlayerAction = BombAction.Shove;
             _phase = Phase.AimingShove;
             hud.SetActionsInteractable(false, false);
-            hud.SetBroadcast("SHOVE: Aim at an enemy · Left-click to confirm · Right-click to cancel");
+            hud.SetBroadcast("STUFF: Aim at an enemy · Left-click to confirm · Right-click to cancel");
             shoveAim.BeginAim(GetAliveEnemiesExceptHolder(), bomb.transform);
         }
 
@@ -883,7 +883,7 @@ namespace Chardin
         {
             switch (a)
             {
-                case BombAction.Shove: return "shoved the bomb";
+                case BombAction.Shove: return "stuffed the bomb";
                 case BombAction.Defuse: return "defused the bomb";
                 default: return "passed the bomb";
             }

@@ -9,9 +9,12 @@ namespace Chardin
     /// </summary>
     public sealed class ShoveAimController : MonoBehaviour
     {
-        [SerializeField] LineRenderer arrowLine;
-        [SerializeField] Color arrowColor = new Color(1f, 0.45f, 0.15f, 0.95f);
-        [SerializeField] float arrowWidth = 0.08f;
+        [SerializeField] SpriteRenderer arrowRenderer;
+        [SerializeField] Sprite arrowSprite;
+        [SerializeField] float arrowThicknessScale = 0.55f;
+        [SerializeField] float arrowScaleMultiplier = 2f;
+        [SerializeField] float tipInset = 0.2f;
+        [SerializeField] int sortingOrder = 20;
         [SerializeField] LayerMask enemyMask = ~0;
 
         Camera _cam;
@@ -34,23 +37,33 @@ namespace Chardin
 
         void EnsureArrow()
         {
-            if (arrowLine != null)
-                return;
+            if (arrowRenderer == null)
+            {
+                var go = new GameObject("ShoveArrow");
+                go.transform.SetParent(transform, false);
+                arrowRenderer = go.AddComponent<SpriteRenderer>();
+            }
 
-            var go = new GameObject("ShoveArrow");
-            go.transform.SetParent(transform, false);
-            arrowLine = go.AddComponent<LineRenderer>();
-            arrowLine.positionCount = 2;
-            arrowLine.useWorldSpace = true;
-            arrowLine.startWidth = arrowWidth;
-            arrowLine.endWidth = arrowWidth * 0.4f;
-            arrowLine.numCapVertices = 4;
-            arrowLine.sortingOrder = 20;
+            if (arrowSprite == null)
+                arrowSprite = LoadArrowSprite();
 
-            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("UI/Default");
-            arrowLine.material = new Material(shader);
-            arrowLine.startColor = arrowColor;
-            arrowLine.endColor = arrowColor;
+            arrowRenderer.sprite = arrowSprite;
+            arrowRenderer.sortingOrder = sortingOrder;
+            arrowRenderer.color = Color.white;
+        }
+
+        static Sprite LoadArrowSprite()
+        {
+            Sprite fromResources = Resources.Load<Sprite>("UI/Arrow");
+            if (fromResources != null)
+                return fromResources;
+
+#if UNITY_EDITOR
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/Art/美术素材/UI/Arrow.png");
+#else
+            return null;
+#endif
         }
 
         public void BeginAim(List<TableSeat> validTargets, Transform from)
@@ -59,6 +72,7 @@ namespace Chardin
             _from = from;
             _hovered = null;
             _aiming = true;
+            EnsureArrow();
             SetArrowVisible(false);
         }
 
@@ -92,9 +106,8 @@ namespace Chardin
             _hovered = RaycastValidEnemy();
             if (_hovered != null && _from != null)
             {
+                UpdateArrowTransform(_from.position, _hovered.BombAnchor.position);
                 SetArrowVisible(true);
-                arrowLine.SetPosition(0, _from.position);
-                arrowLine.SetPosition(1, _hovered.BombAnchor.position);
 
                 if (Input.GetMouseButtonDown(0))
                 {
@@ -111,6 +124,45 @@ namespace Chardin
             }
         }
 
+        void UpdateArrowTransform(Vector3 from, Vector3 to)
+        {
+            if (arrowRenderer == null || arrowRenderer.sprite == null)
+                return;
+
+            Vector3 delta = to - from;
+            float dist = delta.magnitude;
+            if (dist < 0.05f)
+            {
+                SetArrowVisible(false);
+                return;
+            }
+
+            Vector3 dir = delta / dist;
+            Vector3 start = from + dir * tipInset;
+            Vector3 end = to - dir * tipInset;
+            Vector3 span = end - start;
+            float length = span.magnitude;
+            if (length < 0.05f)
+            {
+                SetArrowVisible(false);
+                return;
+            }
+
+            // 素材默认从下指向上（+Y），Atan2 以 +X 为 0°，故减 90°
+            float angle = Mathf.Atan2(span.y, span.x) * Mathf.Rad2Deg - 90f;
+            float naturalLength = Mathf.Max(0.001f, arrowRenderer.sprite.bounds.size.y);
+            float mul = Mathf.Max(0.01f, arrowScaleMultiplier);
+
+            Transform t = arrowRenderer.transform;
+            t.position = start + span * 0.5f;
+            t.rotation = Quaternion.Euler(0f, 0f, angle);
+            // X = 厚度（*2），Y = 沿指向刚好铺满 from→to
+            t.localScale = new Vector3(
+                arrowThicknessScale * mul,
+                length / naturalLength,
+                1f);
+        }
+
         TableSeat RaycastValidEnemy()
         {
             if (_cam == null || _validTargets == null || _validTargets.Count == 0)
@@ -119,7 +171,6 @@ namespace Chardin
             Vector3 world = _cam.ScreenToWorldPoint(Input.mousePosition);
             Vector2 point = world;
 
-            // Prefer overlap collider
             var hits = Physics2D.OverlapPointAll(point);
             for (int i = 0; i < hits.Length; i++)
             {
@@ -128,7 +179,6 @@ namespace Chardin
                     return seat;
             }
 
-            // Fallback: nearest valid by distance
             TableSeat best = null;
             float bestDist = 0.75f;
             for (int i = 0; i < _validTargets.Count; i++)
@@ -147,8 +197,8 @@ namespace Chardin
 
         void SetArrowVisible(bool visible)
         {
-            if (arrowLine != null)
-                arrowLine.enabled = visible;
+            if (arrowRenderer != null)
+                arrowRenderer.enabled = visible;
         }
     }
 }
