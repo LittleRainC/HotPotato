@@ -211,9 +211,52 @@ namespace Ruilin
             }
 
             if (playerAlive && !enemyAlive)
-                ShowRewards();
+            {
+                if (SceneManager.GetActiveScene().name == "Level5")
+                    StartCoroutine(PlayLevel5VictoryCameraOnly());
+                else
+                    ShowRewards();
+            }
             else
                 ShowGameOver();
+        }
+
+        System.Collections.IEnumerator PlayLevel5VictoryCameraOnly()
+        {
+            // Level5 is the final scene: no reward selection, game-over overlay,
+            // broadcast board, action buttons, or other UI should cover the shot.
+            Bomb activeBomb = Object.FindObjectOfType<Bomb>(true);
+            if (activeBomb != null)
+                activeBomb.gameObject.SetActive(false);
+
+            if (gameOverPanel != null)
+                gameOverPanel.SetActive(false);
+            if (rewardPanel != null)
+                rewardPanel.SetActive(false);
+            if (replacePanel != null)
+                replacePanel.SetActive(false);
+            if (canvas != null)
+                canvas.gameObject.SetActive(false);
+
+            Time.timeScale = 1f;
+
+            Camera mainCamera = Camera.main;
+            Level5VictoryCamera cameraAnimation = mainCamera != null
+                ? mainCamera.GetComponent<Level5VictoryCamera>()
+                : null;
+
+            if (cameraAnimation != null)
+                yield return cameraAnimation.PlayVictoryZoom();
+            else
+                Debug.LogWarning(
+                    "[Ruilin] Level5 victory camera animation is missing from Main Camera.");
+
+            yield return new WaitForSecondsRealtime(3f);
+
+            RunInventory.ClearRun();
+            RunInventory.ClearContinueFlag();
+            Time.timeScale = 1f;
+            SceneManager.LoadScene(StartSceneName);
         }
 
         void ShowGameOver()
@@ -738,16 +781,7 @@ namespace Ruilin
                 new Vector2(0.38f, 0.36f), new Vector2(0.62f, 0.47f));
             gameOverPanel.SetActive(false);
 
-            rewardPanel = MakeOverlay("RuilinReward", new Color(0.03f, 0.04f, 0.06f, 0.92f));
-            MakeText(rewardPanel.transform, "选择一件道具", 52,
-                new Vector2(0.2f, 0.82f), new Vector2(0.8f, 0.94f));
-            rewardCards[0] = MakeButton(rewardPanel.transform, "", () => ChooseReward(0),
-                new Vector2(0.14f, 0.30f), new Vector2(0.46f, 0.78f));
-            rewardCards[1] = MakeButton(rewardPanel.transform, "", () => ChooseReward(1),
-                new Vector2(0.54f, 0.30f), new Vector2(0.86f, 0.78f));
-            nextButton = MakeButton(rewardPanel.transform, "NEXT", NextLevel,
-                new Vector2(0.39f, 0.10f), new Vector2(0.61f, 0.21f));
-            rewardPanel.SetActive(false);
+            BuildRewardUi();
 
             replacePanel = MakeOverlay("RuilinReplace", new Color(0f, 0f, 0f, 0.92f));
             MakeText(replacePanel.transform, "道具栏已满，请选择要替换的道具", 38,
@@ -761,6 +795,64 @@ namespace Ruilin
             MakeButton(slots.transform, "槽位2", null, Vector2.zero, Vector2.one);
             replacePanel.SetActive(false);
         }
+
+        void BuildRewardUi()
+        {
+            rewardPanel = MakeOverlay("RuilinReward", new Color(0.03f, 0.04f, 0.06f, 0.92f));
+            MakeText(rewardPanel.transform, "选择一件道具", 52,
+                new Vector2(0.2f, 0.82f), new Vector2(0.8f, 0.94f));
+            rewardCards[0] = MakeButton(rewardPanel.transform, "", () => ChooseReward(0),
+                new Vector2(0.14f, 0.30f), new Vector2(0.46f, 0.78f));
+            rewardCards[1] = MakeButton(rewardPanel.transform, "", () => ChooseReward(1),
+                new Vector2(0.54f, 0.30f), new Vector2(0.86f, 0.78f));
+            nextButton = MakeButton(rewardPanel.transform, "NEXT", NextLevel,
+                new Vector2(0.39f, 0.10f), new Vector2(0.61f, 0.21f));
+            rewardPanel.SetActive(false);
+        }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Replaces the old serialized reward panel with the same two-card UI
+        /// that is laid out and styled at runtime.
+        /// </summary>
+        public void RebuildEditableRewardUi()
+        {
+            if (Application.isPlaying)
+                return;
+
+            battle = GetComponent<BattleController>();
+            canvas = FindBattleCanvas();
+            if (canvas == null)
+            {
+                Debug.LogError("[Ruilin] Cannot rebuild reward UI: battle Canvas missing.");
+                return;
+            }
+
+            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font == null)
+                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+            Transform existing = FindOverlayPanel("RuilinReward");
+            if (existing != null)
+                DestroyImmediate(existing.gameObject);
+
+            BuildRewardUi();
+            LayoutRewardCards();
+
+            // Persist representative cards so the final runtime layout is
+            // visible and editable in the Hierarchy. Gameplay rerolls them.
+            var catalog = ItemCatalog.All;
+            if (catalog.Count > 0)
+                SetCard(rewardCards[0], catalog[0]);
+            if (catalog.Count > 1)
+                SetCard(rewardCards[1], catalog[1]);
+            if (nextButton != null)
+                nextButton.gameObject.SetActive(false);
+
+            rewardPanel.SetActive(false);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        }
+#endif
 
         bool BindExistingUi()
         {

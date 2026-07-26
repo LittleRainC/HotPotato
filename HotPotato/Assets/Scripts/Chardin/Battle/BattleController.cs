@@ -552,11 +552,15 @@ namespace Chardin
         {
             var victim = clockwiseOrder[victimIndex];
             Debug.Log($"[Battle] EXPLODE {victim.DisplayName}");
+            Vector3 explosionPosition = bomb != null
+                ? bomb.transform.position
+                : victim.BombAnchor.position;
 
             if (victim.IsPlayer)
             {
                 hud.SetBroadcast("The bomb blew up in your hands!");
                 yield return hud.PlayFullscreenDamageFlash();
+                yield return hud.PlayExplosionAt(explosionPosition);
 
                 _hearts--;
                 hud.SetHearts(_hearts);
@@ -583,12 +587,16 @@ namespace Chardin
             else
                 yield return new WaitForSeconds(0.45f);
 
+            yield return hud.PlayExplosionAt(explosionPosition);
             victim.SetAlive(false);
 
             if (CountAlive() <= 1 && PlayerStillAlive())
             {
                 _phase = Phase.MatchOver;
-                hud.SetBroadcast("Victory!");
+                if (SceneManager.GetActiveScene().name == "Level5")
+                    hud.SetBroadcast("");
+                else
+                    hud.SetBroadcast("Victory!");
                 hud.SetActionsInteractable(false, false);
                 hud.SetDecisionTimerVisible(false);
                 _busy = false;

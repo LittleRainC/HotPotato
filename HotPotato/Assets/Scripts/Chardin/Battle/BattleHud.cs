@@ -46,6 +46,12 @@ namespace Chardin
         [SerializeField] float fullscreenFlashSeconds = 0.65f; // 与 Enemy.deathFlashSeconds 一致
         [SerializeField] float fullscreenFlashHz = 14f;
 
+        [Header("Explosion Animation")]
+        [SerializeField] Image fullscreenExplosionImage;
+        [SerializeField] Sprite[] explosionFrames = new Sprite[12];
+        [SerializeField, Min(1f)] float explosionFps = 18f;
+        [SerializeField] Vector2 defaultExplosionSize = new Vector2(900f, 900f);
+
         readonly List<Image> _heartIcons = new List<Image>();
         static Sprite _whiteSprite;
         Transform _canvas;
@@ -80,6 +86,7 @@ namespace Chardin
             SetupDecisionTimer(canvas);
             ApplyDefuseBadgeArt();
             EnsureFullscreenDamageFlash(canvas);
+            EnsureFullscreenExplosion(canvas);
             WireButtons();
             EnsureActionButtonHovers();
             EnsureActionButtonsOnTop();
@@ -193,6 +200,124 @@ namespace Chardin
             }
 
             fullscreenDamageFlash.gameObject.SetActive(false);
+        }
+
+        void EnsureFullscreenExplosion(Transform canvas)
+        {
+            if (fullscreenExplosionImage == null)
+            {
+                var existing = canvas.Find("ExplosionAnimation");
+                if (existing != null)
+                    fullscreenExplosionImage = existing.GetComponent<Image>();
+            }
+
+            if (fullscreenExplosionImage == null)
+            {
+                fullscreenExplosionImage = CreateExplosionView(canvas);
+            }
+
+            if (explosionFrames == null || explosionFrames.Length != 12)
+                explosionFrames = new Sprite[12];
+
+            for (int i = 0; i < explosionFrames.Length; i++)
+            {
+                if (explosionFrames[i] != null)
+                    continue;
+
+                string frameName = (i + 1).ToString("00");
+                Texture2D texture = Resources.Load<Texture2D>(
+                    "UI/Effects/Explosion/" + frameName);
+                if (texture == null)
+                    continue;
+
+                explosionFrames[i] = Sprite.Create(texture,
+                    new Rect(0f, 0f, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f), 100f);
+                explosionFrames[i].name = "Explosion_" + frameName;
+            }
+
+            fullscreenExplosionImage.gameObject.SetActive(false);
+        }
+
+        Image CreateExplosionView(Transform canvas)
+        {
+            var go = CreateUiPanel("ExplosionAnimation", canvas,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Color.white);
+            var rt = (RectTransform)go.transform;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = defaultExplosionSize;
+
+            var image = go.GetComponent<Image>();
+            image.raycastTarget = false;
+            image.preserveAspect = true;
+
+            // Action buttons use nested canvases with high sorting orders.
+            // Give the explosion its own overlay canvas so it covers all UI.
+            var overlay = go.AddComponent<Canvas>();
+            overlay.overrideSorting = true;
+            overlay.sortingOrder = 1000;
+            go.SetActive(false);
+            return image;
+        }
+
+#if UNITY_EDITOR
+        /// <summary>Creates the editable scene object without loading runtime frames.</summary>
+        public void EnsureEditableExplosionHierarchy(Transform battleRoot)
+        {
+            if (Application.isPlaying || battleRoot == null)
+                return;
+
+            Transform canvas = battleRoot.Find("Canvas");
+            if (canvas == null)
+            {
+                Debug.LogError("[BattleHud] Cannot create ExplosionAnimation: Canvas missing.");
+                return;
+            }
+
+            _canvas = canvas;
+            Transform existing = canvas.Find("ExplosionAnimation");
+            if (existing != null)
+                fullscreenExplosionImage = existing.GetComponent<Image>();
+            if (fullscreenExplosionImage == null)
+                fullscreenExplosionImage = CreateExplosionView(canvas);
+
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
+        }
+#endif
+
+        /// <summary>Plays the 12 supplied frames at a world-space explosion point.</summary>
+        public IEnumerator PlayExplosionAt(Vector3 worldPosition)
+        {
+            if (_canvas != null)
+                EnsureFullscreenExplosion(_canvas);
+            if (fullscreenExplosionImage == null
+                || explosionFrames == null
+                || explosionFrames.Length == 0)
+                yield break;
+
+            fullscreenExplosionImage.gameObject.SetActive(true);
+            fullscreenExplosionImage.transform.SetAsLastSibling();
+            fullscreenExplosionImage.color = Color.white;
+
+            Camera worldCamera = Camera.main;
+            if (worldCamera != null)
+            {
+                Vector3 screenPosition = worldCamera.WorldToScreenPoint(worldPosition);
+                if (screenPosition.z >= 0f)
+                    fullscreenExplosionImage.rectTransform.position = screenPosition;
+            }
+
+            float frameSeconds = 1f / Mathf.Max(1f, explosionFps);
+            for (int i = 0; i < explosionFrames.Length; i++)
+            {
+                if (explosionFrames[i] != null)
+                    fullscreenExplosionImage.sprite = explosionFrames[i];
+                yield return new WaitForSecondsRealtime(frameSeconds);
+            }
+
+            fullscreenExplosionImage.gameObject.SetActive(false);
         }
 
         void EnsureHeartSprites()
