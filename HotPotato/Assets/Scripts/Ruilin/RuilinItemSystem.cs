@@ -39,41 +39,41 @@ namespace Ruilin
             new ItemDefinition
             {
                 Id = ItemId.Peek,
-                Name = "窥视",
-                Type = "主动",
-                Description = "敌人持弹时可用：查看当前炸弹倒计时的精确数字。每场2次。",
+                Name = "Peek",
+                Type = "Active",
+                Description = "While an enemy holds the bomb: reveal the exact countdown. 2 uses per match.",
                 UsesPerMatch = 2
             },
             new ItemDefinition
             {
                 Id = ItemId.WireCutter,
-                Name = "拆线钳",
-                Type = "被动",
-                Description = "每场拆线次数+2。",
+                Name = "Wire Cutters",
+                Type = "Passive",
+                Description = "+2 defuse charges per match.",
                 UsesPerMatch = 0
             },
             new ItemDefinition
             {
                 Id = ItemId.SteadyHand,
-                Name = "稳定之手",
-                Type = "被动",
-                Description = "玩家手滑率由40%降低到20%。",
+                Name = "Steady Hand",
+                Type = "Passive",
+                Description = "Reduces your slip chance from 40% to 20%.",
                 UsesPerMatch = 0
             },
             new ItemDefinition
             {
                 Id = ItemId.ReflectGlove,
-                Name = "反弹手套",
-                Type = "主动",
-                Description = "任意时刻可点，每场1次：下次炸弹到你手上时跳过该回合并原路弹回；倒计时≤0也不在你手上爆，弹回后再爆。",
+                Name = "Bounce Glove",
+                Type = "Active",
+                Description = "Click anytime (1/match). Next time the bomb reaches you, skip that turn and bounce it back. If countdown is ≤0, it won't explode on you — it explodes after the bounce.",
                 UsesPerMatch = 1
             },
             new ItemDefinition
             {
                 Id = ItemId.FateDie,
-                Name = "命运骰",
-                Type = "主动",
-                Description = "每场1次：掷D6，倒计时扣除点数后立即移交，可能当场引爆。",
+                Name = "Fate Die",
+                Type = "Active",
+                Description = "1 use per match: roll a D6, subtract from the countdown, then pass immediately. May explode in your hands.",
                 UsesPerMatch = 1
             }
         };

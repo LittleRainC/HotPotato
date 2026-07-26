@@ -74,9 +74,7 @@ namespace Ruilin
                 return;
 
             battle = GetComponent<BattleController>();
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null)
-                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            font = ResolveUiFont();
 
             // 必须用战斗根 Canvas（含 BottomBar），不能 FindObjectOfType——结算层嵌套 Canvas 会抢先
             canvas = FindBattleCanvas();
@@ -159,9 +157,7 @@ namespace Ruilin
             if (canvas == null || canvas.transform.Find("RuilinGameOver") != null)
                 return;
             battle = GetComponent<BattleController>();
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null)
-                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            font = ResolveUiFont();
             BuildUi();
             WireUiButtons();
             EnsurePlayerBombItemBar();
@@ -587,7 +583,7 @@ namespace Ruilin
             Text title = replacePanel.GetComponentInChildren<Text>(true);
             if (title != null && title.transform.parent == replacePanel.transform)
             {
-                title.text = "道具栏已满，请选择要替换的道具";
+                title.text = "Inventory full · Choose an item to replace";
                 title.fontSize = 42;
                 title.color = Color.white;
                 var trt = title.rectTransform;
@@ -638,7 +634,7 @@ namespace Ruilin
                         break;
                 }
                 if (label != null)
-                    label.text = "替换：" + ownedDef.Name + "  [" + ownedDef.Type + "]";
+                    label.text = "Replace: " + ownedDef.Name + "  [" + ownedDef.Type + "]";
             }
 
             replacePanel.transform.SetAsLastSibling();
@@ -795,7 +791,7 @@ namespace Ruilin
             BuildRewardUi();
 
             replacePanel = MakeOverlay("RuilinReplace", new Color(0f, 0f, 0f, 0.92f));
-            MakeText(replacePanel.transform, "道具栏已满，请选择要替换的道具", 38,
+            MakeText(replacePanel.transform, "Inventory full · Choose an item to replace", 38,
                 new Vector2(0.15f, 0.62f), new Vector2(0.85f, 0.78f));
             GameObject slots = MakePanel(replacePanel.transform, "Slots",
                 new Vector2(0.22f, 0.35f), new Vector2(0.78f, 0.56f), Color.clear);
@@ -810,7 +806,7 @@ namespace Ruilin
         void BuildRewardUi()
         {
             rewardPanel = MakeOverlay("RuilinReward", new Color(0.03f, 0.04f, 0.06f, 0.92f));
-            MakeText(rewardPanel.transform, "选择一件道具", 52,
+            MakeText(rewardPanel.transform, "Choose an item", 52,
                 new Vector2(0.2f, 0.82f), new Vector2(0.8f, 0.94f));
             rewardCards[0] = MakeButton(rewardPanel.transform, "", () => ChooseReward(0),
                 new Vector2(0.14f, 0.30f), new Vector2(0.46f, 0.78f));
@@ -839,9 +835,7 @@ namespace Ruilin
                 return;
             }
 
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null)
-                font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            font = ResolveUiFont();
 
             Transform existing = FindOverlayPanel("RuilinReward");
             if (existing != null)
@@ -1161,11 +1155,11 @@ namespace Ruilin
                 ItemDefinition definition = ItemCatalog.Get(owned.Id);
                 string status;
                 if (owned.Id == ItemId.ReflectGlove && battle != null && battle.IsReflectGloveArmed)
-                    status = definition.Name + "\n已就绪";
+                    status = definition.Name + "\nArmed";
                 else if (definition.IsActive)
                     status = definition.Name + "\n×" + owned.RemainingUses;
                 else
-                    status = definition.Name + "\n被动";
+                    status = definition.Name + "\nPassive";
                 ApplyItemVisual(slotButton, definition, status, rewardCardLayout: false);
 
                 if (definition.IsActive && owned.RemainingUses > 0)
@@ -1239,7 +1233,7 @@ namespace Ruilin
                 button.image.preserveAspect = true;
             }
 
-            Font font = null;
+            Font font = ResolveUiFont();
             Text title = null;
             for (int i = 0; i < button.transform.childCount; i++)
             {
@@ -1253,7 +1247,7 @@ namespace Ruilin
 
             if (title != null)
             {
-                font = title.font;
+                title.font = font;
                 title.text = item.Name + "  [" + item.Type + "]";
                 title.fontSize = 30;
                 title.fontStyle = FontStyle.Bold;
@@ -1268,13 +1262,6 @@ namespace Ruilin
                 lrt.pivot = new Vector2(0.5f, 1f);
                 lrt.anchoredPosition = new Vector2(0f, 150f);
                 lrt.sizeDelta = new Vector2(0f, 40f);
-            }
-
-            if (font == null)
-            {
-                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-                if (font == null)
-                    font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             }
 
             Text desc = EnsureRewardDescText(button.transform, font);
@@ -1345,6 +1332,7 @@ namespace Ruilin
             Text label = button.GetComponentInChildren<Text>(true);
             if (label != null)
             {
+                label.font = ResolveUiFont();
                 label.text = labelText ?? "";
                 var lrt = label.rectTransform;
                 // 文字挂在卡面下方，避免与图重叠
@@ -1426,7 +1414,7 @@ namespace Ruilin
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
             Text text = go.GetComponent<Text>();
-            text.font = font;
+            text.font = font != null ? font : ResolveUiFont();
             text.fontSize = size;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;
@@ -1434,6 +1422,35 @@ namespace Ruilin
             text.text = value;
             text.raycastTarget = false;
             return text;
+        }
+
+        /// <summary>
+        /// 卡牌词条是中文：内置 LegacyRuntime/Arial 无汉字会显示方框/乱码。
+        /// 优先用系统中文字体动态生成。
+        /// </summary>
+        static Font ResolveUiFont()
+        {
+            try
+            {
+                Font os = Font.CreateDynamicFontFromOSFont(new[]
+                {
+                    "Microsoft YaHei UI",
+                    "Microsoft YaHei",
+                    "SimHei",
+                    "PingFang SC",
+                    "Noto Sans CJK SC",
+                    "Arial Unicode MS"
+                }, 32);
+                if (os != null)
+                    return os;
+            }
+            catch
+            {
+                // ignore and fall back
+            }
+
+            return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                   ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
         }
 
         Button MakeButton(Transform parent, string label, UnityEngine.Events.UnityAction action,
