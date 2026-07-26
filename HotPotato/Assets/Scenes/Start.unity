@@ -1631,7 +1631,7 @@ MonoBehaviour:
   settingsCloseButton: {fileID: 1546978288}
   creditsRoot: {fileID: 1148661613}
   creditsCloseButton: {fileID: 332879899}
-  firstLevelSceneName: Level1
+  firstLevelSceneName: Tutorial
 --- !u!1 &933953531
 GameObject:
   m_ObjectHideFlags: 0
@@ -2154,7 +2154,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: 1257e88661f5d6c4abd0d5d27cc49f3d, type: 3}
+  m_Sprite: {fileID: 21300000, guid: c6ef53b5a50e6c043972c03b17a6d604, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0

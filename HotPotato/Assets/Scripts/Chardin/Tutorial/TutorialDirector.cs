@@ -24,10 +24,10 @@ namespace Chardin
             TryAttachToBattle();
         }
 
-        /// <summary>也可由 BattleController 在 Level1 主动调用。</summary>
+        /// <summary>也可由 BattleController 在 Tutorial 主动调用。</summary>
         public static void TryAttachToBattle()
         {
-            if (SceneManager.GetActiveScene().name != "Level1")
+            if (SceneManager.GetActiveScene().name != "Tutorial")
                 return;
 
             var battle = Object.FindObjectOfType<BattleController>();
@@ -118,7 +118,14 @@ namespace Chardin
                 return;
             }
 
-            _ui = TutorialDialogueUI.Create(canvas.transform);
+            // Prefer the editable dialogue UI stored in the Tutorial scene.
+            // Include inactive objects because the dialogue starts hidden.
+            _ui = Object.FindObjectOfType<TutorialDialogueUI>(true);
+            if (_ui == null)
+            {
+                Debug.LogWarning("[Tutorial] Scene dialogue UI missing; creating runtime fallback.");
+                _ui = TutorialDialogueUI.Create(canvas.transform);
+            }
             _ui.PanelClicked += OnPanelClicked;
 
             _guiding = true;

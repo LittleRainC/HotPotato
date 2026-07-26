@@ -16,11 +16,11 @@ namespace Ruilin
         /// <summary>与 Build Settings 中启用的关卡顺序一致：赢关后按此链加载下一关。</summary>
         static readonly string[] RunLevelOrder =
         {
-            "Level1", "Level2", "Level3", "Level4", "Level5"
+            "Tutorial", "Level2", "Level3", "Level4", "Level5"
         };
 
         /// <summary>教学关：开局无续跑标记时清空背包；每关通关都选卡并继承到下一关。</summary>
-        const string TutorialSceneName = "Level1";
+        const string TutorialSceneName = "Tutorial";
         const string StartSceneName = "Start";
 
         BattleController battle;
@@ -105,7 +105,7 @@ namespace Ruilin
             }
             else
             {
-                // Start→Level1，或直接进关，都视为新 Run
+                // Start→Tutorial，或直接进关，都视为新 Run
                 RunInventory.ClearRun();
             }
             Debug.Log("[Ruilin] Enter " + SceneManager.GetActiveScene().name +
@@ -820,6 +820,11 @@ namespace Ruilin
                 itemBar = null;
                 return;
             }
+
+            // Several level scenes keep this placeholder disabled by default.
+            // Finding an inactive transform is not enough: its item cards remain
+            // invisible unless the parent panel is explicitly enabled.
+            panel.gameObject.SetActive(true);
 
             // 去掉丑框：背景 Invisible，标题隐藏
             var panelImg = panel.GetComponent<Image>();

@@ -25,7 +25,7 @@ namespace Ruilin
         [SerializeField] GameObject creditsRoot;
         [SerializeField] Button creditsCloseButton;
 
-        [SerializeField] string firstLevelSceneName = "Level1";
+        [SerializeField] string firstLevelSceneName = "Tutorial";
 
         void Awake()
         {

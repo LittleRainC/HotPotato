@@ -499,6 +499,9 @@ namespace Chardin
         bool _tutorialGateActive;
         BombAction? _tutorialOnlyAction;
         bool _tutorialDefuseAvailable;
+        TutorialButtonPulse _passTutorialPulse;
+        TutorialButtonPulse _shoveTutorialPulse;
+        TutorialButtonPulse _defuseTutorialPulse;
 
         public void SetActionsInteractable(bool interactable, bool defuseAvailable)
         {
@@ -518,6 +521,7 @@ namespace Chardin
         /// </summary>
         public void SetTutorialGate(BombAction? onlyAction, bool defuseAvailable)
         {
+            EnsureTutorialButtonPulses();
             _tutorialGateActive = true;
             _tutorialOnlyAction = onlyAction;
             _tutorialDefuseAvailable = defuseAvailable;
@@ -528,6 +532,7 @@ namespace Chardin
         {
             _tutorialGateActive = false;
             _tutorialOnlyAction = null;
+            SetTutorialPulse(null);
         }
 
         void ApplyTutorialGate()
@@ -538,6 +543,37 @@ namespace Chardin
             if (btnPass != null) btnPass.interactable = pass;
             if (btnShove != null) btnShove.interactable = shove;
             if (btnDefuse != null) btnDefuse.interactable = defuse;
+            SetTutorialPulse(pass ? BombAction.Pass
+                : shove ? BombAction.Shove
+                : defuse ? BombAction.Defuse
+                : (BombAction?)null);
+        }
+
+        void EnsureTutorialButtonPulses()
+        {
+            _passTutorialPulse = EnsureTutorialPulse(btnPass, _passTutorialPulse);
+            _shoveTutorialPulse = EnsureTutorialPulse(btnShove, _shoveTutorialPulse);
+            _defuseTutorialPulse = EnsureTutorialPulse(btnDefuse, _defuseTutorialPulse);
+        }
+
+        static TutorialButtonPulse EnsureTutorialPulse(
+            Button button, TutorialButtonPulse current)
+        {
+            if (current != null || button == null)
+                return current;
+            var pulse = button.GetComponent<TutorialButtonPulse>();
+            return pulse != null ? pulse : button.gameObject.AddComponent<TutorialButtonPulse>();
+        }
+
+        void SetTutorialPulse(BombAction? action)
+        {
+            EnsureTutorialButtonPulses();
+            if (_passTutorialPulse != null)
+                _passTutorialPulse.SetPulsing(action == BombAction.Pass);
+            if (_shoveTutorialPulse != null)
+                _shoveTutorialPulse.SetPulsing(action == BombAction.Shove);
+            if (_defuseTutorialPulse != null)
+                _defuseTutorialPulse.SetPulsing(action == BombAction.Defuse);
         }
 
         public void SetDecisionTimerVisible(bool visible)

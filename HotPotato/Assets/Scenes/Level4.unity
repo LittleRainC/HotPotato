@@ -890,7 +890,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u7B49\u5F85\u884C\u52A8\u20BF  "
+  m_Text: "Waiting for action..."
 --- !u!1 &300034
 GameObject:
   m_ObjectHideFlags: 0

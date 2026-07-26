@@ -17,6 +17,40 @@ namespace Chardin
 
         public bool Visible => root != null && root.activeSelf;
 
+        void Awake()
+        {
+            BindPanelButton();
+        }
+
+        void BindPanelButton()
+        {
+            if (panelButton == null)
+                return;
+
+            // Runtime listeners are not serialized with the scene. Rebind on
+            // every load, and remove first so runtime-created UI cannot double-bind.
+            panelButton.onClick.RemoveListener(HandlePanelButtonClicked);
+            panelButton.onClick.AddListener(HandlePanelButtonClicked);
+        }
+
+        void HandlePanelButtonClicked()
+        {
+            PanelClicked?.Invoke();
+        }
+
+        /// <summary>
+        /// Creates and serializes the editable child hierarchy. Intended for the
+        /// Tutorial scene editor builder; runtime code should only call this as a fallback.
+        /// </summary>
+        public void InitializeHierarchy()
+        {
+            if (root == null || panelImage == null || panelButton == null
+                || speakerText == null || bodyText == null)
+                Build(transform.parent);
+            else
+                root = gameObject;
+        }
+
         public static TutorialDialogueUI Create(Transform canvas)
         {
             var host = new GameObject("TutorialDialogue", typeof(RectTransform));
@@ -77,7 +111,7 @@ namespace Chardin
             panelButton = panelGo.AddComponent<Button>();
             panelButton.transition = Selectable.Transition.None;
             panelButton.targetGraphic = panelImage;
-            panelButton.onClick.AddListener(() => PanelClicked?.Invoke());
+            BindPanelButton();
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (font == null)

@@ -114,7 +114,7 @@ namespace Chardin
 
         void Start()
         {
-            if (SceneManager.GetActiveScene().name == "Level1")
+            if (SceneManager.GetActiveScene().name == "Tutorial")
             {
                 ForcePlayerFirstHolder = true;
                 TutorialDirector.TryAttachToBattle();
@@ -236,7 +236,7 @@ namespace Chardin
             MoveBombToHolder();
 
             var holder = clockwiseOrder[_holderIndex];
-            hud.SetBroadcast($"新炸弹 · {holder.DisplayName} 持有");
+            hud.SetBroadcast($"New bomb · {holder.DisplayName} has it");
             Debug.Log($"[Battle] Round start countdown={initial} holder={holder.DisplayName}");
 
             BeginHolderTurn();
@@ -256,14 +256,14 @@ namespace Chardin
                 _decisionDeadline = Time.time + decisionSeconds;
                 hud.SetActionsInteractable(true, _defuseCharges > 0);
                 hud.SetDecisionTimer(decisionSeconds, decisionSeconds);
-                hud.SetBroadcast($"你的回合 · 炸弹 {bomb.Logic.Countdown}");
+                hud.SetBroadcast($"Your turn · Bomb {bomb.Logic.Countdown}");
             }
             else
             {
                 _phase = Phase.AwaitingAiAction;
                 hud.SetActionsInteractable(false, false);
                 hud.SetDecisionTimerVisible(false);
-                hud.SetBroadcast($"等待 {holder.DisplayName} 行动…");
+                hud.SetBroadcast($"Waiting for {holder.DisplayName}…");
                 RequestAiMove(holder);
             }
         }
@@ -328,7 +328,7 @@ namespace Chardin
             _pendingPlayerAction = BombAction.Shove;
             _phase = Phase.AimingShove;
             hud.SetActionsInteractable(false, false);
-            hud.SetBroadcast("塞：指向敌人，左键确认，右键取消");
+            hud.SetBroadcast("SHOVE: Aim at an enemy · Left-click to confirm · Right-click to cancel");
             shoveAim.BeginAim(GetAliveEnemiesExceptHolder(), bomb.transform);
         }
 
@@ -352,7 +352,7 @@ namespace Chardin
             _pendingPlayerAction = null;
             _phase = Phase.AwaitingPlayerAction;
             hud.SetActionsInteractable(true, _defuseCharges > 0);
-            hud.SetBroadcast($"你的回合 · 炸弹 {bomb.Logic.Countdown}");
+            hud.SetBroadcast($"Your turn · Bomb {bomb.Logic.Countdown}");
         }
 
         void ForceTimeoutPass()
@@ -364,7 +364,7 @@ namespace Chardin
             if (next < 0)
                 return;
 
-            hud.SetBroadcast("超时！强制传");
+            hud.SetBroadcast("Time's up! Forced pass");
             StartCoroutine(ResolveMove(_holderIndex, BombAction.Pass, next, fromTimeout: true));
         }
 
@@ -429,9 +429,9 @@ namespace Chardin
             }
 
             string line = $"{actor.DisplayName} {ActionLabel(action)}";
-            if (fromTimeout) line += "（超时）";
-            if (result.Slipped) line += " · 手滑！";
-            if (action == BombAction.Defuse) line += "（全场广播）";
+            if (fromTimeout) line += " (timed out)";
+            if (result.Slipped) line += " · Fumbled!";
+            if (action == BombAction.Defuse) line += " (broadcast to all)";
             hud.SetBroadcast(line);
             Debug.Log($"[Battle] {line} -> {result.CountdownAfter} transfer={result.ShouldTransfer}");
 
@@ -519,7 +519,7 @@ namespace Chardin
             int playerIndex = _holderIndex;
             _passDirection *= -1;
 
-            hud.SetBroadcast("反弹手套：跳过回合，原路弹回！");
+            hud.SetBroadcast("BOUNCE GLOVE: Turn skipped · Bomb returned to sender!");
             yield return new WaitForSeconds(0.12f);
 
             TableSeat fromSeat = clockwiseOrder[playerIndex];
@@ -555,7 +555,7 @@ namespace Chardin
 
             if (victim.IsPlayer)
             {
-                hud.SetBroadcast("你挨炸了！");
+                hud.SetBroadcast("The bomb blew up in your hands!");
                 yield return hud.PlayFullscreenDamageFlash();
 
                 _hearts--;
@@ -563,21 +563,21 @@ namespace Chardin
                 if (_hearts <= 0)
                 {
                     _phase = Phase.MatchOver;
-                    hud.SetBroadcast("心已耗尽 · Run 结束");
+                    hud.SetBroadcast("No hearts left · Run over");
                     hud.SetActionsInteractable(false, false);
                     hud.SetDecisionTimerVisible(false);
                     _busy = false;
                     yield break;
                 }
 
-                hud.SetBroadcast("你挨炸了 · 本场重打");
+                hud.SetBroadcast("You got blown up · Restarting the round");
                 yield return new WaitForSeconds(0.45f);
                 _busy = false;
                 StartFightRound(reviveAll: true);
                 yield break;
             }
 
-            hud.SetBroadcast($"{victim.DisplayName} 出局");
+            hud.SetBroadcast($"{victim.DisplayName} is out");
             if (victim is Enemy enemy)
                 yield return enemy.PlayDeathFlash();
             else
@@ -588,14 +588,14 @@ namespace Chardin
             if (CountAlive() <= 1 && PlayerStillAlive())
             {
                 _phase = Phase.MatchOver;
-                hud.SetBroadcast("胜利！");
+                hud.SetBroadcast("Victory!");
                 hud.SetActionsInteractable(false, false);
                 hud.SetDecisionTimerVisible(false);
                 _busy = false;
                 yield break;
             }
 
-            hud.SetBroadcast("换新炸弹…");
+            hud.SetBroadcast("Bringing in a new bomb…");
             yield return new WaitForSeconds(0.5f);
             _busy = false;
             StartFightRound(reviveAll: false);
@@ -687,14 +687,14 @@ namespace Chardin
                 return false;
             if (IsPlayerHolder() || _phase == Phase.AwaitingPlayerAction || _phase == Phase.AimingShove)
             {
-                hud.SetBroadcast("窥视只能在敌人持弹时使用");
+                hud.SetBroadcast("PEEK can only be used while an enemy holds the bomb");
                 return false;
             }
             if (_phase != Phase.AwaitingAiAction)
                 return false;
             if (!RunInventory.TryConsume(ItemId.Peek))
                 return false;
-            hud.SetBroadcast($"窥视：当前精确倒计时为 {bomb.Logic.Countdown}");
+            hud.SetBroadcast($"PEEK: Exact countdown is {bomb.Logic.Countdown}");
             return true;
         }
 
@@ -743,7 +743,7 @@ namespace Chardin
             hud.SetActionsInteractable(false, false);
             int roll = UnityEngine.Random.Range(1, 7);
             bomb.AddCountdown(-roll);
-            hud.SetBroadcast($"命运骰：掷出 {roll}，剩余 {bomb.Logic.Countdown}");
+            hud.SetBroadcast($"FATE DIE: Rolled {roll} · {bomb.Logic.Countdown} remaining");
             yield return new WaitForSeconds(0.35f);
 
             if (bomb.CheckExplodeOnReceive())
@@ -768,7 +768,7 @@ namespace Chardin
             if (!RunInventory.TryConsume(ItemId.ReflectGlove))
                 return false;
             _reflectGloveArmed = true;
-            hud.SetBroadcast("反弹手套已就绪：下次炸弹到手时跳过回合并原路弹回");
+            hud.SetBroadcast("BOUNCE GLOVE armed: Your next turn will be skipped and the bomb returned");
             return true;
         }
 
@@ -840,9 +840,9 @@ namespace Chardin
         {
             switch (a)
             {
-                case BombAction.Shove: return "塞了";
-                case BombAction.Defuse: return "拆了";
-                default: return "传了";
+                case BombAction.Shove: return "shoved the bomb";
+                case BombAction.Defuse: return "defused the bomb";
+                default: return "passed the bomb";
             }
         }
     }
