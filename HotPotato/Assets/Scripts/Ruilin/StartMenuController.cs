@@ -30,6 +30,7 @@ namespace Ruilin
         void Awake()
         {
             AudioManager.Ensure();
+            AudioManager.Ensure().PlayMenuBgm();
             BindOrFind();
             Wire();
             HidePopups();
@@ -133,31 +134,51 @@ namespace Ruilin
             if (startButton != null)
             {
                 startButton.onClick.RemoveAllListeners();
-                startButton.onClick.AddListener(OnStartClicked);
+                startButton.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    OnStartClicked();
+                });
             }
 
             if (settingsButton != null)
             {
                 settingsButton.onClick.RemoveAllListeners();
-                settingsButton.onClick.AddListener(OpenSettings);
+                settingsButton.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    OpenSettings();
+                });
             }
 
             if (creditsButton != null)
             {
                 creditsButton.onClick.RemoveAllListeners();
-                creditsButton.onClick.AddListener(OpenCredits);
+                creditsButton.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    OpenCredits();
+                });
             }
 
             if (settingsCloseButton != null)
             {
                 settingsCloseButton.onClick.RemoveAllListeners();
-                settingsCloseButton.onClick.AddListener(CloseSettings);
+                settingsCloseButton.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    CloseSettings();
+                });
             }
 
             if (creditsCloseButton != null)
             {
                 creditsCloseButton.onClick.RemoveAllListeners();
-                creditsCloseButton.onClick.AddListener(CloseCredits);
+                creditsCloseButton.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    CloseCredits();
+                });
             }
 
             if (bgmSlider != null)

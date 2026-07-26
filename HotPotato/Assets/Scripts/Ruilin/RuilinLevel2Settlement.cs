@@ -239,6 +239,9 @@ namespace Ruilin
                 canvas.gameObject.SetActive(false);
 
             Time.timeScale = 1f;
+            AudioManager.Ensure().StopTick();
+            AudioManager.Ensure().StopBgm();
+            AudioManager.Ensure().PlayNailong();
 
             Camera mainCamera = Camera.main;
             Level5VictoryCamera cameraAnimation = mainCamera != null
@@ -262,6 +265,8 @@ namespace Ruilin
         void ShowGameOver()
         {
             EnsureSettlementOverlayCanvases();
+            AudioManager.Ensure().StopTick();
+            AudioManager.Ensure().PlayLoseStinger();
             if (gameOverPanel != null)
             {
                 gameOverPanel.transform.SetAsLastSibling();
@@ -286,6 +291,8 @@ namespace Ruilin
             RollTwoRewards();
             rewardCommitted = false;
             pendingReward = null;
+            AudioManager.Ensure().StopTick();
+            AudioManager.Ensure().PlayVictoryBgm();
             if (nextButton != null)
                 nextButton.gameObject.SetActive(false);
             if (rewardPanel != null)
@@ -610,7 +617,11 @@ namespace Ruilin
 
                 int captured = i;
                 button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => ReplaceItem(captured));
+                button.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    ReplaceItem(captured);
+                });
                 button.interactable = true;
 
                 ItemDefinition ownedDef = ItemCatalog.Get(RunInventory.Items[i].Id);
@@ -1089,14 +1100,30 @@ namespace Ruilin
         {
             Button restart = gameOverPanel.GetComponentInChildren<Button>(true);
             restart.onClick.RemoveAllListeners();
-            restart.onClick.AddListener(Restart);
+            restart.onClick.AddListener(() =>
+            {
+                AudioManager.Ensure().PlayUiClick();
+                Restart();
+            });
 
             rewardCards[0].onClick.RemoveAllListeners();
-            rewardCards[0].onClick.AddListener(() => ChooseReward(0));
+            rewardCards[0].onClick.AddListener(() =>
+            {
+                AudioManager.Ensure().PlayUiClick();
+                ChooseReward(0);
+            });
             rewardCards[1].onClick.RemoveAllListeners();
-            rewardCards[1].onClick.AddListener(() => ChooseReward(1));
+            rewardCards[1].onClick.AddListener(() =>
+            {
+                AudioManager.Ensure().PlayUiClick();
+                ChooseReward(1);
+            });
             nextButton.onClick.RemoveAllListeners();
-            nextButton.onClick.AddListener(NextLevel);
+            nextButton.onClick.AddListener(() =>
+            {
+                AudioManager.Ensure().PlayUiClick();
+                NextLevel();
+            });
 
             gameOverPanel.SetActive(false);
             rewardPanel.SetActive(false);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Ruilin;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -440,17 +441,29 @@ namespace Chardin
             if (btnPass != null)
             {
                 btnPass.onClick.RemoveAllListeners();
-                btnPass.onClick.AddListener(() => ActionClicked?.Invoke(BombAction.Pass));
+                btnPass.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    ActionClicked?.Invoke(BombAction.Pass);
+                });
             }
             if (btnShove != null)
             {
                 btnShove.onClick.RemoveAllListeners();
-                btnShove.onClick.AddListener(() => ActionClicked?.Invoke(BombAction.Shove));
+                btnShove.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    ActionClicked?.Invoke(BombAction.Shove);
+                });
             }
             if (btnDefuse != null)
             {
                 btnDefuse.onClick.RemoveAllListeners();
-                btnDefuse.onClick.AddListener(() => ActionClicked?.Invoke(BombAction.Defuse));
+                btnDefuse.onClick.AddListener(() =>
+                {
+                    AudioManager.Ensure().PlayUiClick();
+                    ActionClicked?.Invoke(BombAction.Defuse);
+                });
             }
         }
 
@@ -551,21 +564,33 @@ namespace Chardin
             {
                 if (i < count && !string.IsNullOrEmpty(names[i]))
                 {
-                    labels[i].gameObject.SetActive(true);
+                    // 激活文本及其父级 OpponentName 根节点（名牌底板）
+                    SetOpponentNameplateActive(labels[i], true);
                     labels[i].text = names[i];
                 }
                 else
                 {
                     labels[i].text = string.Empty;
-                    // 多出来的标签藏掉，避免残留旧名字
-                    if (i >= count)
-                        labels[i].gameObject.SetActive(false);
+                    SetOpponentNameplateActive(labels[i], false);
                 }
             }
 
             // 兼容旧单字段引用
             if (count > 0 && opponentNameText != null && labels.Count == 0)
                 opponentNameText.text = names[0];
+        }
+
+        static void SetOpponentNameplateActive(Text label, bool active)
+        {
+            if (label == null)
+                return;
+            Transform plate = label.transform;
+            while (plate != null && !plate.name.StartsWith("OpponentName"))
+                plate = plate.parent;
+            if (plate != null)
+                plate.gameObject.SetActive(active);
+            else
+                label.gameObject.SetActive(active);
         }
 
         List<Text> CollectOpponentNameLabels()

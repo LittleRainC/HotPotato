@@ -53,6 +53,7 @@ namespace Chardin
                     RestoreSpriteColors();
                 VisualRoot.gameObject.SetActive(alive);
             }
+            SetNameplateActive(alive);
         }
 
         public override void ResetSeat()
@@ -63,6 +64,7 @@ namespace Chardin
                 RestoreSpriteColors();
                 VisualRoot.gameObject.SetActive(true);
             }
+            SetNameplateActive(true);
             base.ResetSeat();
         }
 
@@ -95,6 +97,17 @@ namespace Chardin
 
             for (int i = 0; i < renderers.Length; i++)
                 renderers[i].color = baseColors[i];
+        }
+
+        void SetNameplateActive(bool active)
+        {
+            // 场景里挂在敌人下的世界空间 Nameplate（与 Sprite 同级，不在 VisualRoot 内）
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                Transform child = transform.GetChild(i);
+                if (child != null && child.name.StartsWith("Nameplate"))
+                    child.gameObject.SetActive(active);
+            }
         }
 
         void RestoreSpriteColors()

@@ -166,6 +166,7 @@ namespace Chardin
             _hearts = startingHearts;
             _passDirection = 1;
             _previousHolderIndex = -1;
+            AudioManager.Ensure().PlayBattleBgm();
 
             if (clockwiseOrder == null || clockwiseOrder.Count < 2)
             {
@@ -200,11 +201,11 @@ namespace Chardin
                     enemies.Add(s);
             }
 
-            // 按世界坐标从左到右，和 UI 上的 OpponentName 标签对齐
+            // 按世界坐标从左到右，和 UI 上的 OpponentName 标签对齐；阵亡者留空以隐藏名牌
             enemies.Sort((a, b) => a.BombAnchor.position.x.CompareTo(b.BombAnchor.position.x));
             var names = new List<string>(enemies.Count);
             for (int i = 0; i < enemies.Count; i++)
-                names.Add(enemies[i].DisplayName);
+                names.Add(enemies[i].IsAlive ? enemies[i].DisplayName : string.Empty);
             hud.SetOpponentNames(names);
         }
 
@@ -214,6 +215,7 @@ namespace Chardin
             {
                 for (int i = 0; i < clockwiseOrder.Count; i++)
                     clockwiseOrder[i].ResetSeat();
+                SyncOpponentNameLabels();
             }
 
             _reflectGloveArmed = false;
@@ -234,6 +236,7 @@ namespace Chardin
 
             bomb.Arm(initial, viewerIsHolder: IsPlayerHolder());
             MoveBombToHolder();
+            SyncTickAudio();
 
             var holder = clockwiseOrder[_holderIndex];
             hud.SetBroadcast($"New bomb · {holder.DisplayName} has it");
@@ -242,12 +245,24 @@ namespace Chardin
             BeginHolderTurn();
         }
 
+        void SyncTickAudio(bool armed = true)
+        {
+            if (bomb == null || !armed)
+            {
+                AudioManager.Ensure().StopTick();
+                return;
+            }
+
+            AudioManager.Ensure().SyncBombTick(bomb.Logic.GetAppearanceTier(), true);
+        }
+
         void BeginHolderTurn()
         {
             _busy = false;
             _pendingPlayerAction = null;
             bomb.SetViewerIsHolder(IsPlayerHolder());
             MoveBombToHolder();
+            SyncTickAudio();
 
             var holder = clockwiseOrder[_holderIndex];
             if (holder.IsPlayer)
@@ -434,6 +449,8 @@ namespace Chardin
             if (action == BombAction.Defuse) line += " (broadcast to all)";
             hud.SetBroadcast(line);
             Debug.Log($"[Battle] {line} -> {result.CountdownAfter} transfer={result.ShouldTransfer}");
+            AudioManager.Ensure().PlayActionSfx(action, result.Slipped);
+            SyncTickAudio();
 
             // 刷新炸弹外观（倒计时已变），再播程序动画
             bomb.SetViewerIsHolder(IsPlayerHolder());
@@ -456,6 +473,7 @@ namespace Chardin
                 }
 
                 MoveBombToHolder();
+                SyncTickAudio();
                 _busy = false;
                 BeginHolderTurn();
                 yield break;
@@ -496,6 +514,7 @@ namespace Chardin
                 yield break;
             }
 
+            SyncTickAudio();
             yield return new WaitForSeconds(0.12f);
             _busy = false;
             BeginHolderTurn();
@@ -517,7 +536,6 @@ namespace Chardin
         {
             _reflectGloveArmed = false;
             int playerIndex = _holderIndex;
-            _passDirection *= -1;
 
             hud.SetBroadcast("BOUNCE GLOVE: Turn skipped · Bomb returned to sender!");
             yield return new WaitForSeconds(0.12f);
@@ -543,6 +561,7 @@ namespace Chardin
                 yield break;
             }
 
+            SyncTickAudio();
             yield return new WaitForSeconds(0.12f);
             _busy = false;
             BeginHolderTurn();
@@ -556,11 +575,18 @@ namespace Chardin
                 ? bomb.transform.position
                 : victim.BombAnchor.position;
 
+            SyncTickAudio(armed: false);
+            AudioManager.Ensure().PlayExplosion();
+            if (!victim.IsPlayer)
+                AudioManager.Ensure().PlayDeathVoDelayed(DetectPersonality(victim));
+
             if (victim.IsPlayer)
             {
                 hud.SetBroadcast("The bomb blew up in your hands!");
                 yield return hud.PlayFullscreenDamageFlash();
                 yield return hud.PlayExplosionAt(explosionPosition);
+                if (bomb != null)
+                    bomb.SetVisible(false);
 
                 _hearts--;
                 hud.SetHearts(_hearts);
@@ -588,11 +614,15 @@ namespace Chardin
                 yield return new WaitForSeconds(0.45f);
 
             yield return hud.PlayExplosionAt(explosionPosition);
+            if (bomb != null)
+                bomb.SetVisible(false);
             victim.SetAlive(false);
+            SyncOpponentNameLabels();
 
             if (CountAlive() <= 1 && PlayerStillAlive())
             {
                 _phase = Phase.MatchOver;
+                SyncTickAudio(armed: false);
                 if (SceneManager.GetActiveScene().name == "Level5")
                     hud.SetBroadcast("");
                 else
@@ -702,6 +732,7 @@ namespace Chardin
                 return false;
             if (!RunInventory.TryConsume(ItemId.Peek))
                 return false;
+            AudioManager.Ensure().PlayItemUse();
             hud.SetBroadcast($"PEEK: Exact countdown is {bomb.Logic.Countdown}");
             return true;
         }
@@ -740,6 +771,7 @@ namespace Chardin
                 return false;
             if (!RunInventory.TryConsume(ItemId.FateDie))
                 return false;
+            AudioManager.Ensure().PlayItemUse();
             StartCoroutine(ResolveFateDie());
             return true;
         }
@@ -751,6 +783,7 @@ namespace Chardin
             hud.SetActionsInteractable(false, false);
             int roll = UnityEngine.Random.Range(1, 7);
             bomb.AddCountdown(-roll);
+            SyncTickAudio();
             hud.SetBroadcast($"FATE DIE: Rolled {roll} · {bomb.Logic.Countdown} remaining");
             yield return new WaitForSeconds(0.35f);
 
@@ -765,6 +798,7 @@ namespace Chardin
             _holderIndex = GetClockwiseNextIndex(from);
             MoveBombToHolder();
             bomb.SetViewerIsHolder(IsPlayerHolder());
+            SyncTickAudio();
             _busy = false;
             BeginHolderTurn();
         }
@@ -775,6 +809,7 @@ namespace Chardin
                 return false;
             if (!RunInventory.TryConsume(ItemId.ReflectGlove))
                 return false;
+            AudioManager.Ensure().PlayItemUse();
             _reflectGloveArmed = true;
             hud.SetBroadcast("BOUNCE GLOVE armed: Your next turn will be skipped and the bomb returned");
             return true;

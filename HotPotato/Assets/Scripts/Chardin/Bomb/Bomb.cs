@@ -29,10 +29,19 @@ namespace Chardin
 
         public void Arm(int initialCountdown, bool viewerIsHolder = true)
         {
+            gameObject.SetActive(true);
             Logic.Reset(initialCountdown);
             ViewerIsHolder = viewerIsHolder;
+            if (view == null)
+                view = GetComponent<BombView>();
             view.CaptureRestPosition();
             view.Refresh(Logic, ViewerIsHolder);
+        }
+
+        /// <summary>爆炸特效播完后隐藏；新炸弹 Arm 时再显示。</summary>
+        public void SetVisible(bool visible)
+        {
+            gameObject.SetActive(visible);
         }
 
         public void SetViewerIsHolder(bool isHolder)

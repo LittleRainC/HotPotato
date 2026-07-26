@@ -1,0 +1,18 @@
+id,name_cn,file_name,file_stem,extension,category,loop,note,unity_path
+ID,中文名称,完整文件名,文件名(无后缀),后缀,分类,是否循环,策划说明,建议Unity路径
+SND-01,炸弹滴答,amb_tick_01_loop.mp3,amb_tick_01_loop,mp3,amb,TRUE,四条音色质感统一只变速度密度；首尾无缝循环；程序切换用短淡入淡出,Assets/Audio/amb/amb_tick_01_loop.mp3
+SND-02,传,sfx_act_pass_01.mp3,sfx_act_pass_01,mp3,sfx,FALSE,呼啸 whoosh，轻快,Assets/Audio/sfx/sfx_act_pass_01.mp3
+SND-03,塞,sfx_act_stuff_01.wav,sfx_act_stuff_01,wav,sfx,FALSE,重扣版 whoosh+闷撞击，比传狠,Assets/Audio/sfx/sfx_act_stuff_01.wav
+SND-04,手滑,sfx_act_slip_01.wav,sfx_act_slip_01,wav,sfx,FALSE,打滑声+滑稽懊恼尾音，喜剧化,Assets/Audio/sfx/sfx_act_slip_01.wav
+SND-05,掐/拆,sfx_act_snuff_01.mp3,sfx_act_snuff_01,mp3,sfx,FALSE,剪刀咔嚓脆响；对齐 hit-stop,Assets/Audio/sfx/sfx_act_snuff_01.mp3
+SND-06,爆炸,sfx_bomb_explode_01.wav,sfx_bomb_explode_01,wav,sfx,FALSE,烟花式喜剧爆炸，响但不疼,Assets/Audio/sfx/sfx_bomb_explode_01.wav
+SND-07,Snake挨炸惨叫,vo_snake_death_01.wav,vo_snake_death_01,wav,vo,FALSE,短促喜剧惨叫；建议比爆炸晚约 0.1s,Assets/Audio/vo/vo_snake_death_01.wav
+SND-8,游戏失败,bgm_result_lose_01.wav,bgm_result_lose_01,wav,bgm,FALSE,下行长音/倒计时断电感，重要情绪点,Assets/Audio/bgm/bgm_result_lose_01.wav
+SND-9,按钮点击,ui_btn_click_01.mp3,ui_btn_click_01,mp3,ui,FALSE,干脆中性,Assets/Audio/ui/ui_btn_click_01.mp3
+SND-10,使用道具,sfx_item_01.mp3,sfx_item_01,mp3,sfx,FALSE,通用道具触发音,Assets/Audio/sfx/sfx_item_01.mp3
+SND-11,战斗BGM,bgm_battle_01_loop.mp3,bgm_battle_01_loop,mp3,bgm,TRUE,氛围底噪，给滴答留空间，响度压低,Assets/Audio/bgm/bgm_battle_01_loop.mp3
+SND-12,胜利+选道具BGM,bgm_victory_01_loop.mp3,bgm_victory_01_loop,mp3,bgm,TRUE,层间/胜利松弛感，与战斗对比,Assets/Audio/bgm/bgm_victory_01_loop.mp3
+SND-13,主菜单BGM,bgm_menu_01_loop.mp3,bgm_menu_01_loop,mp3,bgm,TRUE,主题感，荒诞幽默,Assets/Audio/bgm/bgm_menu_01_loop.mp3
+SND-14,Worm挨炸惨叫,vo_worm_death_01.wav,vo_worm_death_01,wav,vo,FALSE,短促喜剧惨叫；建议比爆炸晚约 0.1s,Assets/Audio/vo/vo_worm_death_01.wav
+SND-15,Ash挨炸惨叫,vo_ash_death_01.wav,vo_ash_death_01,wav,vo,FALSE,短促喜剧惨叫；建议比爆炸晚约 0.1s,Assets/Audio/vo/vo_ash_death_01.wav
+SND-16,奶龙叫声(结算),vo_nailong_01.mp3,vo_nailong_01,mp3,vo,FALSE,结算时播放,Assets/Audio/vo/vo_nailong_01.mp3
