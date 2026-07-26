@@ -3286,19 +3286,25 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Fuse Follies - Hot Potato
+  m_text: 'Designer - Hanson, Khloe
 
+    Project Manager - Hanson
 
-    Design - Hanson, Khloe
+    Programmer
+    - Ruilin
 
-    Programming
-    - Chardin, Ruilin
+    Freelance Programmer - Chardin
 
-    Art - Jiayuan, Ruien, Bingyi
+    Art Director - Jiayuan, Ruien
+
+    2D
+    Artist - Jiayuan, Ruien, Bingyi
 
     Audio - Kaishuo, Hanson
 
-'
+
+    Special Thanks
+    - Khloe'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
